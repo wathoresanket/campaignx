@@ -11,17 +11,18 @@
 ## 📋 Table of Contents
 
 1. [Project Overview](#1-project-overview)
-2. [Why Multi-Agent Architecture?](#2-why-multi-agent-architecture)
-3. [Project Structure](#3-project-structure)
-4. [Agent Execution Pipeline](#4-agent-execution-pipeline)
-5. [Multi-Agent Details (The 8 Agents)](#5-multi-agent-details-the-8-agents)
-6. [Core Technical Innovations](#6-core-technical-innovations)
+2. [Hackathon Highlights](#-hackathon-highlights)
+3. [Why Multi-Agent Architecture?](#2-why-multi-agent-architecture)
+4. [Project Structure](#3-project-structure)
+5. [Agent Execution Pipeline](#4-agent-execution-pipeline)
+6. [Multi-Agent Details (The 8 Agents)](#5-multi-agent-details-the-8-agents)
+7. [Core Technical Innovations](#6-core-technical-innovations)
     - [Dynamic API Discovery](#dynamic-api-discovery)
     - [Multi-Armed Bandit (MAB) Optimization](#multi-armed-bandit-mab-optimization)
     - [Historical Learning Service](#historical-learning-service)
-7. [Explainable AI & Transparent Logging](#7-explainable-ai--transparent-logging)
-8. [Tech Stack](#8-tech-stack)
-9. [Setup & Installation](#9-setup--installation)
+8. [Explainable AI & Transparent Logging](#7-explainable-ai--transparent-logging)
+9. [Tech Stack](#8-tech-stack)
+10. [Setup & Installation](#9-setup--installation)
 
 ---
 
@@ -29,16 +30,27 @@
 
 **CampaignX** is an industrial-grade AI multi-agent system designed for the InXiteOut FrostHack 2026. It automates the entire lifecycle of email marketing campaigns—from natural language brief parsing to autonomous optimization. 
 
-Built specifically for **SuperBFSI** (a premier Indian BFSI provider), the system manages complex financial marketing workflows using a cluster of 8 specialized agents that collaborate, reason, and execute against remote APIs discovered dynamically via OpenAPI standards.
+Built specifically for **SuperBFSI** (a premier Indian BFSI provider), the system manages complex financial marketing workflows using a coordinated team of 8 specialized AI agents that collaborate, reason, and execute against remote APIs discovered dynamically via OpenAPI standards.
+
+---
+
+## 🏆 Hackathon Highlights
+
+• **True Multi-Agent System:** 8 specialized agents with bounded contexts.  
+• **Dynamic Tool Discovery:** Real-time API integration via OpenAPI spec parsing.  
+• **MAB Optimization:** programmatic RL loop with weighted engagement scoring.  
+• **Human-in-the-Loop:** Strategic approval gates combined with autonomous execution.  
+• **Full Explainability:** Transparent reasoning logs for every agent decision.  
+• **Historical Learning:** Cross-campaign memory that improves strategies over time.
 
 ---
 
 ## 2. Why Multi-Agent Architecture?
 
-Instead of a monolithic LLM prompt, CampaignX uses an **Agentic Mesh Interface**:
-*   **Modular Reasoning:** Each agent (e.g., `SegmentationAgent`, `StrategyAgent`) has a bounded context and validated Pydantic output.
+Instead of relying on a single LLM prompt chain, CampaignX uses a coordinated team of specialized AI agents:
+*   **Modular Reasoning:** Each agent (e.g., `SegmentationAgent`, `StrategyAgent`) has a granular responsibility and validated Pydantic output.
 *   **Sequential Reliability:** Data flows through a structured pipeline where each stage is verified before physical execution.
-*   **Autonomous Optimization:** Independent `Optimization` and `Analytics` agents allow for programmatic learning loops without human intervention.
+*   **Autonomous Optimization:** Independent agents handle metric retrieval and MAB logic, allowing the system to learn without human intervention.
 *   **Enterprise Transparency:** Every reasoning step, LLM call, and API interaction is logged with human-readable justifications.
 
 ---
@@ -85,10 +97,24 @@ campaignx/
 The orchestrator manages a bidirectional flow of data across two primary phases:
 
 ### Phase A: Strategic Planning (Human-in-the-Loop)
-`Brief Parser` → `Segmentation` → `Strategy Designer` → `Content Generator` → **[APPROVAL GATE]**
+```mermaid
+graph TD
+    A[User Brief] --> B[CampaignBriefAgent]
+    B --> C[SegmentationAgent]
+    C --> D[StrategyAgent]
+    D --> E[ContentAgent]
+    E --> F{Human Approval}
+```
 
 ### Phase B: Autonomous Execution & Optimization
-`API Execution` → `Metric Retrieval` → `MAB Optimization Loop` → `Insight Generation`
+```mermaid
+graph TD
+    F -->|Approved| G[ExecutionAgent]
+    G --> H[AnalyticsAgent]
+    H --> I[OptimizationAgent]
+    I -->|MAB Loop| J[InsightAgent]
+    J -->|Learn| B
+```
 
 ---
 
@@ -145,8 +171,8 @@ Transparency is built into the core:
 
 - **Backend:** FastAPI, SQLAlchemy, HTTPx, Pydantic v2.
 - **LLM Engine:** Google Gemini 2.0 Flash (Reasoning) & Llama 3 (Optimization).
-- **Frontend:** React 18, Vite, TailwindCSS, Recharts (for MAB visualization).
-- **Database:** SQLite (Local Caching & History).
+- **Frontend:** React 18, Vite, TailwindCSS, Recharts.
+- **Database:** SQLite (Local History).
 
 ---
 
