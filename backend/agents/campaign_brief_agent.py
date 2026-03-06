@@ -1,0 +1,45 @@
+"""
+CampaignBriefAgent — Parses natural-language briefs into structured JSON.
+"""
+
+import json
+import logging
+from typing import Dict, Any
+from agents.base_agent import BaseAgent
+
+logger = logging.getLogger(__name__)
+
+
+class CampaignBriefAgent(BaseAgent):
+
+    async def run(self, brief_text: str) -> Dict[str, Any]:
+        """Parses a natural language brief into structured campaign JSON."""
+        prompt = f"""
+        You are an expert marketing campaign analyzer. Parse the following natural language campaign brief into a structured JSON format.
+        
+        The JSON should have these precise keys:
+        - "product": string, name of the product being promoted
+        - "constraints": string, any specific rules or constraints mentioned
+        - "target_segments": list of strings, the overall target audience mentioned
+        - "tone": string, the tone of the communication
+        - "optimization_goal": string, what metrics to optimize for (e.g., "open rate and click rate")
+        - "cta_url": string, the call to action URL if present, otherwise null
+
+        Brief to parse:
+        "{brief_text}"
+        """
+        try:
+            return await self._complete_json(prompt, temperature=0.2)
+        except Exception as e:
+            logger.error(f"CampaignBriefAgent failed: {e}")
+            raise
+
+    def _mock_response(self) -> Dict[str, Any]:
+        return {
+            "product": "XDeposit",
+            "constraints": "Give 0.25% extra returns for female senior citizens.",
+            "target_segments": ["female_senior_citizens", "senior_citizens", "young_professionals", "inactive_customers"],
+            "tone": "professional but engaging",
+            "optimization_goal": "open rate and click rate",
+            "cta_url": "https://superbfsi.com/xdeposit/explore/"
+        }

@@ -1,0 +1,66 @@
+import React, { useEffect, useState } from 'react';
+import { backendClient } from '../api/backendClient';
+import { Terminal } from 'lucide-react';
+
+export default function AgentLogsPage() {
+    const [logs, setLogs] = useState([]);
+
+    useEffect(() => {
+        const fetchLogs = async () => {
+            try {
+                const resp = await backendClient.get('/logs');
+                setLogs(resp.data);
+            } catch (e) {
+                console.error(e);
+            }
+        };
+        fetchLogs();
+        const intv = setInterval(fetchLogs, 5000);
+        return () => clearInterval(intv);
+    }, []);
+
+    return (
+        <div className="bg-white shadow sm:rounded-lg">
+            <div className="px-4 py-5 border-b border-gray-200 sm:px-6 flex items-center">
+                <Terminal className="h-6 w-6 text-gray-500 mr-3" />
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Agent Transparent Reasoning Logs</h3>
+            </div>
+            <div className="px-4 py-5 sm:p-6 space-y-6">
+                {logs.map((log) => (
+                    <div key={log.id} className="bg-gray-50 rounded border border-gray-200 p-4">
+                        <div className="flex justify-between items-center border-b border-gray-200 pb-2 mb-3">
+                            <div className="flex items-center space-x-2">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {log.agent_name}
+                                </span>
+                                <span className="text-xs text-gray-500">Campaign #{log.campaign_id}</span>
+                            </div>
+                            <span className="text-xs text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+                        </div>
+
+                        <p className="text-sm font-semibold text-gray-800 mb-2">Reasoning Summary</p>
+                        <p className="text-sm text-gray-600 mb-4">{log.reasoning_summary}</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Input Data</p>
+                                <pre className="bg-gray-800 text-green-400 p-3 rounded text-xs overflow-x-auto h-32 whitespace-pre-wrap">
+                                    {log.input_data ? (typeof log.input_data === 'string' ? JSON.stringify(JSON.parse(log.input_data || '{}'), null, 2).catch(() => log.input_data) : JSON.stringify(log.input_data, null, 2)) : 'No input'}
+                                </pre>
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Output Data</p>
+                                <pre className="bg-gray-800 text-blue-400 p-3 rounded text-xs overflow-x-auto h-32 whitespace-pre-wrap">
+                                    {log.output_data ? (typeof log.output_data === 'string' ? JSON.stringify(JSON.parse(log.output_data || '{}'), null, 2).catch(() => log.output_data) : JSON.stringify(log.output_data, null, 2)) : 'No output'}
+                                </pre>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {logs.length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-10">No agent activities logged yet.</p>
+                )}
+            </div>
+        </div>
+    );
+}
