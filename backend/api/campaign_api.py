@@ -20,6 +20,15 @@ from services.historical_learning_service import HistoricalLearningService
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
+# ── Global Logs (all campaigns) ──
+
+@router.get("/logs", response_model=List[AgentLogResponse], tags=["logs"])
+def get_all_logs(db: Session = Depends(get_db)):
+    """Returns all agent logs across all campaigns (used by AgentLogsPage)."""
+    return db.query(AgentLog).order_by(AgentLog.timestamp.desc()).all()
+
+# ── Campaign Start ──
+
 @router.post("/start", response_model=CampaignResponse)
 async def start_campaign(request: CampaignBriefRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Receives brief, creates campaign, and kicks off async orchestration up to approval gate."""
@@ -71,10 +80,23 @@ async def approve_campaign(campaign_id: int, background_tasks: BackgroundTasks, 
     return service.update_status(campaign_id, "approved")
 
 @router.post("/{campaign_id}/reject")
-async def reject_campaign(campaign_id: int, feedback: dict, db: Session = Depends(get_db)):
-    """Rejects campaign plan. Optionally handles regenerations."""
+async def reject_campaign(campaign_id: int, feedback: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Rejects campaign plan with feedback text.
+    Triggers background regeneration with feedback injected into agent prompts.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    feedback_text = feedback.get("feedback", "No specific feedback provided")
+
+    # Trigger regeneration in background with human feedback
+    orchestrator = AgentOrchestrator(db)
+    background_tasks.add_task(orchestrator.regenerate_campaign_plan, campaign_id, feedback_text)
+
     service = CampaignService(db)
-    return service.update_status(campaign_id, "draft")
+    return service.update_status(campaign_id, "generating")
 
 # ── Campaign Metrics & Runs ──
 

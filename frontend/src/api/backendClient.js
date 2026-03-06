@@ -8,5 +8,3 @@ export const backendClient = axios.create({
         'Content-Type': 'application/json',
     },
 });
-
-window.backendClient = backendClient;

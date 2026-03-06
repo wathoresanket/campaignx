@@ -1,28 +1,50 @@
 """
 ExecutionAgent
 ───────────────
-Dispatches campaigns via the real CampaignX send_campaign API.
-Each segment+variant combination is sent as a separate API call.
-Returns the API-assigned campaign_ids for later report retrieval.
+Dispatches campaigns via dynamically discovered API tools from the OpenAPI spec.
+Uses OpenAPILoader to discover the send_campaign endpoint at runtime,
+then dispatches through the DynamicToolRegistry.
 """
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
 from agents.base_agent import BaseAgent
-from tools.campaignx_api_client import CampaignXAPIClient
+from config import settings
+from tools.openapi_loader import OpenAPILoader
+from tools.dynamic_tool_registry import DynamicToolRegistry
 
 logger = logging.getLogger(__name__)
 
+# Path to the OpenAPI spec file
+SPEC_PATH = os.path.join(os.path.dirname(__file__), "..", "tools", "openapi.json")
+
 
 class ExecutionAgent(BaseAgent):
-    """Sends campaigns via the real CampaignX API and tracks campaign_ids."""
+    """
+    Sends campaigns via dynamically discovered API tools.
+    Loads the OpenAPI spec at init → discovers send_campaign endpoint →
+    dispatches through DynamicToolRegistry.
+    """
 
     def __init__(self):
         super().__init__()
-        self.api_client = CampaignXAPIClient()
+        # Dynamic API discovery: load spec → extract tools → register
+        self.loader = OpenAPILoader(SPEC_PATH)
+        tools, routes = self.loader.extract_tools()
+        self.registry = DynamicToolRegistry(
+            base_url=settings.CAMPAIGNX_BASE_URL,
+            api_key=settings.CAMPAIGNX_API_KEY,
+        )
+        for tool in tools:
+            op_id = tool["function"]["name"]
+            route = routes[op_id]
+            self.registry.register_tool(op_id, route["path"], route["method"])
+
+        logger.info(f"ExecutionAgent discovered {len(tools)} API tools: {self.registry.get_registered_tools()}")
 
     async def run(
         self,
@@ -30,20 +52,17 @@ class ExecutionAgent(BaseAgent):
         segments_with_ids: List[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Sends each segment+variant combination via the real API.
+        Sends each segment+variant combination via dynamically discovered API.
 
         Args:
-            execution_plan: Dict mapping segment_id -> list of variant dicts
+            execution_plan: Dict mapping segment_id → list of variant dicts
                             with keys: label, subject, body, send_time
             segments_with_ids: List of segment dicts with customer_ids for dispatch
-
-        Returns:
-            Dict with sent_campaigns (list of dispatch results with api_campaign_id)
         """
         sent_campaigns = []
         segments_map = {}
 
-        # Build lookup: segment_id -> customer_ids
+        # Build lookup: segment_id → customer_ids
         if segments_with_ids:
             for seg in segments_with_ids:
                 seg_id = str(seg.get("id", seg.get("segment_id", "")))
@@ -68,14 +87,19 @@ class ExecutionAgent(BaseAgent):
 
                 logger.info(
                     f"Dispatching variant {variant.get('label', '?')} "
-                    f"to {len(customer_ids)} customers in segment {seg_id}"
+                    f"to {len(customer_ids)} customers in segment {seg_id} "
+                    f"via dynamically discovered send_campaign tool"
                 )
 
-                result = await self.api_client.send_campaign(
-                    subject=subject,
-                    body=body,
-                    customer_ids=customer_ids,
-                    send_time=send_time,
+                # Execute via dynamic tool registry (discovered from OpenAPI spec)
+                result = await self.registry.execute(
+                    "send_campaign_api_v1_send_campaign_post",
+                    {
+                        "subject": subject,
+                        "body": body,
+                        "list_customer_ids": customer_ids,
+                        "send_time": send_time,
+                    },
                 )
 
                 api_campaign_id = result.get("campaign_id")
@@ -97,6 +121,6 @@ class ExecutionAgent(BaseAgent):
 
     @staticmethod
     def _default_send_time() -> str:
-        """Generate a default send time 1 hour from now in DD:MM:YY HH:MM:SS format."""
+        """Generate a default send time 1 hour from now in DD:MM:YY HH:MM:SS format (IST)."""
         future = datetime.now() + timedelta(hours=1)
         return future.strftime("%d:%m:%y %H:%M:%S")

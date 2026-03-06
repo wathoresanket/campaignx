@@ -2,7 +2,6 @@
 CampaignBriefAgent — Parses natural-language briefs into structured JSON.
 """
 
-import json
 import logging
 from typing import Dict, Any
 from agents.base_agent import BaseAgent
@@ -33,13 +32,3 @@ class CampaignBriefAgent(BaseAgent):
         except Exception as e:
             logger.error(f"CampaignBriefAgent failed: {e}")
             raise
-
-    def _mock_response(self) -> Dict[str, Any]:
-        return {
-            "product": "XDeposit",
-            "constraints": "Give 0.25% extra returns for female senior citizens.",
-            "target_segments": ["female_senior_citizens", "senior_citizens", "young_professionals", "inactive_customers"],
-            "tone": "professional but engaging",
-            "optimization_goal": "open rate and click rate",
-            "cta_url": "https://superbfsi.com/xdeposit/explore/"
-        }

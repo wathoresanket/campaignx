@@ -1,6 +1,23 @@
+/**
+ * AgentLogsPage.jsx
+ * ─────────────────
+ * Global view of all agent reasoning logs across all campaigns.
+ */
+
 import React, { useEffect, useState } from 'react';
 import { backendClient } from '../api/backendClient';
 import { Terminal } from 'lucide-react';
+
+/** Safely pretty-print a JSON string, falling back to raw text. */
+function formatJson(raw) {
+    if (!raw) return 'No data';
+    try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return JSON.stringify(parsed, null, 2);
+    } catch {
+        return raw;
+    }
+}
 
 export default function AgentLogsPage() {
     const [logs, setLogs] = useState([]);
@@ -8,7 +25,7 @@ export default function AgentLogsPage() {
     useEffect(() => {
         const fetchLogs = async () => {
             try {
-                const resp = await backendClient.get('/logs');
+                const resp = await backendClient.get('/campaigns/logs');
                 setLogs(resp.data);
             } catch (e) {
                 console.error(e);
@@ -45,13 +62,13 @@ export default function AgentLogsPage() {
                             <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Input Data</p>
                                 <pre className="bg-gray-800 text-green-400 p-3 rounded text-xs overflow-x-auto h-32 whitespace-pre-wrap">
-                                    {log.input_data ? (typeof log.input_data === 'string' ? JSON.stringify(JSON.parse(log.input_data || '{}'), null, 2).catch(() => log.input_data) : JSON.stringify(log.input_data, null, 2)) : 'No input'}
+                                    {formatJson(log.input_data)}
                                 </pre>
                             </div>
                             <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Output Data</p>
                                 <pre className="bg-gray-800 text-blue-400 p-3 rounded text-xs overflow-x-auto h-32 whitespace-pre-wrap">
-                                    {log.output_data ? (typeof log.output_data === 'string' ? JSON.stringify(JSON.parse(log.output_data || '{}'), null, 2).catch(() => log.output_data) : JSON.stringify(log.output_data, null, 2)) : 'No output'}
+                                    {formatJson(log.output_data)}
                                 </pre>
                             </div>
                         </div>

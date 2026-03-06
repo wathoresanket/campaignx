@@ -19,17 +19,25 @@ class StrategyAgent(BaseAgent):
         """
         history = self._build_history_section(historical_context)
 
+        # Strip customer_ids to keep prompt small — LLM only needs segment metadata
+        slim_segments = [
+            {k: v for k, v in seg.items() if k != "customer_ids"}
+            for seg in segments
+        ]
+
         prompt = f"""
         You are an expert marketing strategist. Given the following customer segments, 
         determine an optimal send time, the number of variants (max 2), and a brief A/B testing plan for each segment.
 
+        IMPORTANT: send_time MUST be in DD:MM:YY HH:MM:SS format (IST), e.g. "06:03:26 09:00:00".
+
         Segments:
-        {json.dumps(segments, indent=2)}
+        {json.dumps(slim_segments, indent=2)}
         {history}
         Return a JSON object with a key "strategies" which is a list.
         Each item in the list should match the segment name and include:
         - "segment_name": string
-        - "send_time": optimal send time (e.g. "09:00 AM", "06:00 PM")
+        - "send_time": string in DD:MM:YY HH:MM:SS format (e.g. "06:03:26 09:00:00")
         - "variants_count": integer (always 2 for A/B testing)
         - "ab_testing_plan": short description of what to test (e.g. "Test emoji subject vs professional subject")
         """
@@ -39,14 +47,3 @@ class StrategyAgent(BaseAgent):
         except Exception as e:
             logger.error(f"StrategyAgent failed: {e}")
             raise
-
-    def _mock_response(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        return [
-            {
-                "segment_name": seg["name"],
-                "send_time": "10:00 AM" if i % 2 == 0 else "08:00 PM",
-                "variants_count": 2,
-                "ab_testing_plan": "Test emoji subject vs professional subject",
-            }
-            for i, seg in enumerate(segments)
-        ]

@@ -4,13 +4,16 @@ import { backendClient } from '../api/backendClient';
 import SegmentTable from '../components/SegmentTable';
 import EmailVariantCard from '../components/EmailVariantCard';
 import AgentLogsPanel from '../components/AgentLogsPanel';
-import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, MessageSquare } from 'lucide-react';
 
 export default function ApprovalPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const [campaign, setCampaign] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [showFeedback, setShowFeedback] = useState(false);
+    const [feedbackText, setFeedbackText] = useState('');
+    const [rejecting, setRejecting] = useState(false);
 
     const fetchCampaign = async () => {
         try {
@@ -45,11 +48,23 @@ export default function ApprovalPage() {
     };
 
     const handleReject = async () => {
+        if (!showFeedback) {
+            setShowFeedback(true);
+            return;
+        }
         try {
-            await backendClient.post(`/campaigns/${id}/reject`, { feedback: "Rejected by user" });
-            navigate('/');
+            setRejecting(true);
+            await backendClient.post(`/campaigns/${id}/reject`, {
+                feedback: feedbackText || "Rejected — please improve the campaign plan."
+            });
+            setShowFeedback(false);
+            setFeedbackText('');
+            setLoading(true);
+            // Campaign status will change to 'generating', polling will pick it up
         } catch (e) {
             alert("Error rejecting campaign");
+        } finally {
+            setRejecting(false);
         }
     };
 
@@ -58,7 +73,11 @@ export default function ApprovalPage() {
             <div className="space-y-6">
                 <div className="flex flex-col items-center justify-center h-48 space-y-4 bg-white shadow sm:rounded-lg">
                     <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-                    <p className="text-gray-500 font-medium">Agents are structuring your campaign plan...</p>
+                    <p className="text-gray-500 font-medium">
+                        {campaign?.status === 'generating' && feedbackText
+                            ? 'Regenerating campaign plan based on your feedback...'
+                            : 'Agents are structuring your campaign plan...'}
+                    </p>
                 </div>
                 <AgentLogsPanel campaignId={id} />
             </div>
@@ -86,10 +105,17 @@ export default function ApprovalPage() {
                     <div className="mt-4 flex md:mt-0 md:ml-4 space-x-3">
                         <button
                             onClick={handleReject}
-                            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                            disabled={rejecting}
+                            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                         >
-                            <XCircle className="-ml-1 mr-2 h-5 w-5 text-red-500" />
-                            Reject & Edit
+                            {rejecting ? (
+                                <Loader2 className="-ml-1 mr-2 h-5 w-5 text-gray-400 animate-spin" />
+                            ) : showFeedback ? (
+                                <MessageSquare className="-ml-1 mr-2 h-5 w-5 text-orange-500" />
+                            ) : (
+                                <XCircle className="-ml-1 mr-2 h-5 w-5 text-red-500" />
+                            )}
+                            {showFeedback ? 'Submit Feedback & Regenerate' : 'Reject & Edit'}
                         </button>
                         <button
                             onClick={handleApprove}
@@ -100,6 +126,25 @@ export default function ApprovalPage() {
                         </button>
                     </div>
                 </div>
+
+                {/* Feedback textarea (shown on first reject click) */}
+                {showFeedback && (
+                    <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg animate-in slide-in-from-top duration-300">
+                        <label className="block text-sm font-medium text-amber-800 mb-2">
+                            💬 What should the AI improve?
+                        </label>
+                        <textarea
+                            value={feedbackText}
+                            onChange={(e) => setFeedbackText(e.target.value)}
+                            placeholder="e.g. Make the email tone more formal, shorten the subject lines, add urgency..."
+                            className="w-full px-3 py-2 border border-amber-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500 text-sm"
+                            rows={3}
+                        />
+                        <p className="text-xs text-amber-600 mt-1">
+                            Your feedback will be injected into the AI agents' prompts for regeneration.
+                        </p>
+                    </div>
+                )}
             </div>
 
             <AgentLogsPanel campaignId={id} />

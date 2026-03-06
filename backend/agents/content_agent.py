@@ -39,6 +39,7 @@ class ContentAgent(BaseAgent):
         {history}
         Rules:
         - Write only in English.
+        - Keep emails concise (under 150 words each).
         - Include the CTA URL if provided.
         - Variant A should be standard/professional.
         - Variant B should use emojis, be concise, and try a different formatting.
@@ -65,22 +66,3 @@ class ContentAgent(BaseAgent):
         except Exception as e:
             logger.error(f"ContentAgent failed: {e}")
             raise
-
-    def _mock_response(self, strategies: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, str]]]:
-        result = {}
-        for strategy in strategies:
-            seg_name = strategy["segment_name"]
-            subject_a = f"Exclusive XDeposit offer for {seg_name.replace('_', ' ').title()}"
-            body_a = "Hello,\n\nWe are pleased to offer you an exclusive return on XDeposit. Visit https://superbfsi.com/xdeposit/explore/ to learn more.\n\nBest,\nSuperBFSI Team"
-            subject_b = "🚀 Boost your wealth with XDeposit!"
-            body_b = "Hey!\n\nReady to earn more? Check out the new XDeposit features! 🔥\n\nTap here: https://superbfsi.com/xdeposit/explore/\n\nCheers,\nSuperBFSI"
-
-            if "female_senior" in seg_name.lower():
-                body_a = "Hello,\n\nAs a valued female senior citizen, you get an extra 0.25% returns on XDeposit. Visit https://superbfsi.com/xdeposit/explore/ to learn more.\n\nBest,\nSuperBFSI Team"
-                body_b = "Hey!\n\nYou're eligible for an EXTRA 0.25% return on XDeposit! 💰👵\n\nTap here: https://superbfsi.com/xdeposit/explore/\n\nCheers,\nSuperBFSI"
-
-            result[seg_name] = [
-                {"label": "A", "subject": subject_a, "body": body_a},
-                {"label": "B", "subject": subject_b, "body": body_b},
-            ]
-        return result

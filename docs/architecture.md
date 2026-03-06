@@ -22,7 +22,7 @@ CampaignX is a **multi-agent AI marketing intelligence platform** that uses auto
 │         ▼                    ▼                    ▼                  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐          │
 │  │  AI Agents   │  │  Services    │  │  External Tools   │          │
-│  │  (8 agents)  │  │  (6 services)│  │  (OpenAPI-based)  │          │
+│  │  (8 agents)  │  │  (6 services)│  │  (CampaignX API)  │          │
 │  └──────────────┘  └──────────────┘  └──────────────────┘          │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -33,15 +33,17 @@ CampaignX is a **multi-agent AI marketing intelligence platform** that uses auto
 
 ### 1. Presentation Layer — React SPA
 - **4 pages**: Campaign Brief → Approval → Dashboard → Agent Logs
-- **Real-time polling**: Auto-refreshes every 5 seconds during execution
-- **Recharts visualizations**: Optimization timeline, metrics charts
+- **Real-time polling**: Auto-refreshes every 3-5 seconds during execution
+- **Recharts visualizations**: Optimization timeline (line), metrics (bar)
 - **Voice input**: Web Speech API for hands-free brief entry
+- **Intelligence panels**: Segment Intelligence, Historical Learnings
 
 ### 2. Application Layer — FastAPI + Agent Orchestrator
-- **RESTful API**: 10+ endpoints with Pydantic schema validation
+- **RESTful API**: 12 endpoints with Pydantic schema validation
 - **Background task execution**: Non-blocking campaign orchestration
 - **BaseAgent pattern**: All 8 AI agents inherit shared LLM infrastructure
 - **Progressive logging**: "running" → "completed" status for every agent action
+- **Centralized API client**: `CampaignXAPIClient` handles all external API calls
 
 ### 3. Data Layer — SQLAlchemy + SQLite
 - **7 ORM models**: Campaign, Segment, EmailVariant, CampaignRun, PerformanceMetric, AgentLog, CampaignInsight
@@ -56,8 +58,8 @@ CampaignX is a **multi-agent AI marketing intelligence platform** that uses auto
                     ┌───────────────┐
                     │   BaseAgent   │
                     │───────────────│
-                    │ - client      │  ← AsyncOpenAI singleton
-                    │ - model       │  ← gpt-4o-mini
+                    │ + client      │  ← AsyncOpenAI singleton
+                    │ + model       │  ← gpt-4o-mini
                     │───────────────│
                     │ _complete_json│  ← Shared JSON completion
                     │ _build_history│  ← Historical context injection
@@ -67,11 +69,13 @@ CampaignX is a **multi-agent AI marketing intelligence platform** that uses auto
          │                  │                  │
     Plan Agents        Run Agents      Intelligence
     ────────────       ──────────      ────────────
-    BriefAgent         ExecutionAgent  SegmentIntel
-    SegmentAgent       AnalyticsAgent  HistoricalLearning
+    BriefAgent         ExecutionAgent  SegmentIntelService
+    SegmentAgent       AnalyticsAgent  HistoricalLearningService
     StrategyAgent      OptimizationAgent
     ContentAgent       InsightAgent
 ```
+
+> Note: `ExecutionAgent` and `AnalyticsAgent` use `CampaignXAPIClient` directly for real API calls (send_campaign, get_report).
 
 ---
 
@@ -80,8 +84,10 @@ CampaignX is a **multi-agent AI marketing intelligence platform** that uses auto
 | Decision | Rationale |
 |----------|-----------|
 | **Sequential agent pipeline** | Each agent's output feeds the next; ensures deterministic flow |
-| **Human-in-the-loop gate** | Between planning and execution — prevents auto-sending bad content |
+| **Human-in-the-loop gate** | Between planning and execution — prevents auto-sending unreviewed content |
 | **BaseAgent inheritance** | Centralizes OpenAI init — DRY principle, single point of change |
 | **Background task execution** | Non-blocking API — frontend stays responsive during long AI calls |
-| **Dynamic API discovery** | ExecutionAgent reads OpenAPI specs — zero-code integration with external services |
+| **CampaignXAPIClient** | Centralized async client for all external API interactions (cohort, send, report) |
+| **Dynamic API discovery** | OpenAPI spec parser + tool registry for future zero-code API integrations |
+| **Historical learning injection** | Past insights injected into agent prompts for continuous improvement |
 | **SQLite default** | Zero-config for hackathon demo; one env var swap to production DB |

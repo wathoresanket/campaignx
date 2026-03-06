@@ -6,17 +6,6 @@ class InsightService:
     def __init__(self, db: Session):
         self.db = db
 
-    def save_insight(self, campaign_id: int, segment_name: str, insight_content: str) -> CampaignInsight:
-        insight = CampaignInsight(
-            campaign_id=campaign_id,
-            segment_name=segment_name,
-            insight_content=insight_content
-        )
-        self.db.add(insight)
-        self.db.commit()
-        self.db.refresh(insight)
-        return insight
-
     def save_insights_batch(self, campaign_id: int, insights_data: List[dict]):
         for item in insights_data:
             insight = CampaignInsight(

@@ -93,8 +93,8 @@ Step 1                Step 2                 Step 3                Step 4
 
 | Agent | Purpose | Key Technique |
 |-------|---------|---------------|
-| **ExecutionAgent** | Dispatches emails via dynamic OpenAPI tools | LLM function-calling |
-| **AnalyticsAgent** | Collects open/click rates per variant | Metric simulation |
+| **ExecutionAgent** | Dispatches emails via CampaignX API | Direct API dispatch via `CampaignXAPIClient` |
+| **AnalyticsAgent** | Collects open/click rates per variant | Real report fetching via `CampaignXAPIClient` |
 | **OptimizationAgent** | Decides exploit vs. explore per segment | Multi-Armed Bandit (MAB) |
 | **InsightAgent** | Converts raw metrics into marketing insights | Data-to-narrative |
 

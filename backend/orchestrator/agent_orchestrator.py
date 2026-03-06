@@ -9,6 +9,7 @@ All customer data and campaign execution flows through the real CampaignX API.
 The database serves as a memory layer for internal state and history.
 """
 
+import os
 import json
 import logging
 from sqlalchemy.orm import Session
@@ -16,7 +17,9 @@ from sqlalchemy.orm import Session
 from models import Campaign, CampaignRun, Segment
 from schemas import CampaignBriefRequest
 from custom_logging.agent_logger import log_agent_action
-from tools.campaignx_api_client import CampaignXAPIClient
+from config import settings
+from tools.openapi_loader import OpenAPILoader
+from tools.dynamic_tool_registry import DynamicToolRegistry
 
 from agents.campaign_brief_agent import CampaignBriefAgent
 from agents.segmentation_agent import SegmentationAgent
@@ -60,8 +63,19 @@ class AgentOrchestrator:
         self.insight_svc = InsightService(db)
         self.learning_svc = HistoricalLearningService(db)
 
-        # External API client
-        self.api_client = CampaignXAPIClient()
+        # Dynamic API discovery: load OpenAPI spec → register tools
+        spec_path = os.path.join(os.path.dirname(__file__), "..", "tools", "openapi.json")
+        loader = OpenAPILoader(spec_path)
+        tools, routes = loader.extract_tools()
+        self.tool_registry = DynamicToolRegistry(
+            base_url=settings.CAMPAIGNX_BASE_URL,
+            api_key=settings.CAMPAIGNX_API_KEY,
+        )
+        for tool in tools:
+            op_id = tool["function"]["name"]
+            route = routes[op_id]
+            self.tool_registry.register_tool(op_id, route["path"], route["method"])
+        logger.info(f"Orchestrator discovered {len(tools)} API tools via OpenAPI spec")
 
         # Agents
         self.brief_agent = CampaignBriefAgent()
@@ -94,16 +108,19 @@ class AgentOrchestrator:
         )
         self.campaign_svc.save_parsed_brief(campaign_id, parsed_brief)
 
-        # 2. Fetch REAL customer cohort from API
+        # 2. Fetch REAL customer cohort via dynamically discovered API tool
         _log(self.db, "DataFetcher", campaign_id, {}, {},
-             "Fetching customer cohort from CampaignX API", "running",
+             "Fetching customer cohort via dynamic API discovery", "running",
              "Fetching real customer cohort data")
 
-        cohort_data = await self.api_client.get_customer_cohort()
+        cohort_response = await self.tool_registry.execute(
+            "get_customer_cohort_api_v1_get_customer_cohort_get", {}
+        )
+        cohort_data = cohort_response.get("data", [])
 
         _log(self.db, "DataFetcher", campaign_id, {},
              {"total_customers": len(cohort_data)},
-             f"Fetched {len(cohort_data)} customers from cohort API", "completed",
+             f"Fetched {len(cohort_data)} customers via dynamic API discovery", "completed",
              f"Retrieved {len(cohort_data)} customers from API")
 
         # 3. Segment customers using REAL cohort data
@@ -275,3 +292,86 @@ class AgentOrchestrator:
             }
             for run in runs for m in run.metrics
         ]
+
+    async def regenerate_campaign_plan(self, campaign_id: int, feedback: str):
+        """
+        Re-runs the plan phase incorporating human rejection feedback.
+        Injects the feedback into Strategy and Content agent prompts
+        so the LLM can generate improved variants.
+        """
+        campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
+        if not campaign:
+            raise ValueError("Campaign not found")
+
+        self.campaign_svc.update_status(campaign_id, "generating")
+
+        _log(self.db, "Orchestrator", campaign_id, {"feedback": feedback}, {},
+             f"Regenerating campaign plan with feedback: {feedback}", "running",
+             "Re-generating campaign based on human feedback")
+
+        brief_text = campaign.brief
+        historical_ctx = self.learning_svc.get_learning_context_string()
+
+        # Add rejection feedback to historical context
+        feedback_context = (
+            f"\n\nHUMAN FEEDBACK (previous plan was rejected):\n{feedback}\n"
+            f"Please address this feedback in the new plan."
+        )
+        enriched_ctx = historical_ctx + feedback_context
+
+        # Re-parse brief (same as original)
+        parsed_brief = await self._run_agent(
+            campaign_id, "CampaignBriefAgent",
+            self.brief_agent.run, [brief_text],
+            input_data={"brief": brief_text, "regeneration": True},
+            action_running="Re-parsing campaign brief",
+            action_done="Re-parsed campaign brief",
+        )
+        self.campaign_svc.save_parsed_brief(campaign_id, parsed_brief)
+
+        # Fetch cohort again via dynamic API discovery
+        cohort_response = await self.tool_registry.execute(
+            "get_customer_cohort_api_v1_get_customer_cohort_get", {}
+        )
+        cohort_data = cohort_response.get("data", [])
+
+        # Re-segment
+        segments = await self._run_agent(
+            campaign_id, "SegmentationAgent",
+            self.segmentation_agent.run, [parsed_brief],
+            kwargs={"cohort_data": cohort_data},
+            input_data={"parsed_brief": parsed_brief, "cohort_size": len(cohort_data)},
+            action_running="Re-segmenting customers with feedback",
+            action_done="Re-created segments incorporating feedback",
+        )
+        self.campaign_svc.save_segments(campaign_id, segments)
+
+        # Re-generate strategy (with feedback injected)
+        strategies = await self._run_agent(
+            campaign_id, "StrategyAgent",
+            self.strategy_agent.run, [segments],
+            kwargs={"historical_context": enriched_ctx},
+            input_data=segments,
+            action_running="Regenerating strategy with human feedback",
+            action_done="Generated improved strategy based on feedback",
+        )
+
+        # Re-generate content (with feedback injected)
+        variants = await self._run_agent(
+            campaign_id, "ContentAgent",
+            self.content_agent.run, [parsed_brief, strategies],
+            kwargs={"historical_context": enriched_ctx},
+            input_data=strategies,
+            action_running="Regenerating email variants based on feedback",
+            action_done="Generated improved email variants",
+        )
+        self.campaign_svc.save_variants(campaign_id, variants)
+
+        # Update status back to pending_approval
+        self.campaign_svc.update_status(campaign_id, "pending_approval")
+
+        _log(self.db, "Orchestrator", campaign_id,
+             {"feedback": feedback}, {"variants_count": len(variants)},
+             "Campaign plan regenerated successfully", "completed",
+             "Regeneration complete — awaiting re-approval")
+

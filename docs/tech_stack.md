@@ -7,7 +7,7 @@
 │                          FRONTEND                                     │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
 │  │  React   │  │   Vite   │  │ Tailwind │  │ Recharts │            │
-│  │  18.x    │  │   7.x    │  │ CSS 3.x  │  │  2.x     │            │
+│  │  19.x    │  │   7.x    │  │ CSS 4.x  │  │  3.x     │            │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘            │
 │  ┌──────────┐  ┌────────────┐  ┌────────────────────────┐          │
 │  │  Axios   │  │ React      │  │ Web Speech API         │          │
@@ -44,11 +44,11 @@
 
 | Technology | Version | Purpose | Why Chosen |
 |-----------|---------|---------|------------|
-| **React** | 18.x | UI framework | Component-based, rich ecosystem, industry standard |
+| **React** | 19.x | UI framework | Component-based, rich ecosystem, industry standard |
 | **Vite** | 7.x | Build tool & dev server | Lightning-fast HMR, minimal config, ESBuild-powered |
-| **Tailwind CSS** | 3.x | Utility-first styling | Rapid UI development, consistent design system |
-| **Recharts** | 2.x | Data visualization | React-native charting, built on D3, declarative API |
-| **React Router** | 6.x | Client-side routing | SPA navigation between 4 pages |
+| **Tailwind CSS** | 4.x | Utility-first styling | Rapid UI development, consistent design system |
+| **Recharts** | 3.x | Data visualization | React-native charting, built on D3, declarative API |
+| **React Router** | 7.x | Client-side routing | SPA navigation between 4 pages |
 | **Axios** | 1.x | HTTP client | Promise-based, interceptors, cleaner than fetch |
 | **Lucide React** | Latest | Icon library | Clean SVG icons, tree-shakeable |
 | **Web Speech API** | Native | Voice input | Browser-native, no dependency needed |
@@ -57,20 +57,20 @@
 ```
 src/
 ├── api/
-│   └── backendClient.js      ← Axios instance (base URL config)
+│   └── backendClient.js         ← Axios instance (base URL config)
 ├── components/
-│   ├── AgentLogsPanel.jsx     ← Live agent activity feed
-│   ├── CampaignTimeline.jsx   ← 9-stage lifecycle visualization
-│   ├── EmailVariantCard.jsx   ← A/B variant preview
+│   ├── AgentLogsPanel.jsx       ← Live agent activity feed
+│   ├── CampaignTimeline.jsx     ← 9-stage lifecycle visualization
+│   ├── EmailVariantCard.jsx     ← A/B variant preview
 │   ├── HistoricalLearningPanel.jsx ← Past campaign knowledge
-│   ├── MetricsChart.jsx       ← Bar chart for run metrics
+│   ├── MetricsChart.jsx         ← Bar chart for run metrics
 │   ├── OptimizationTimelineChart.jsx ← Line chart across runs
-│   └── SegmentTable.jsx       ← Segments with AI intelligence
+│   └── SegmentTable.jsx         ← Segments with AI intelligence
 └── pages/
-    ├── CampaignBriefPage.jsx  ← Input + voice + historical learnings
-    ├── ApprovalPage.jsx       ← Review & approve/reject
-    ├── DashboardPage.jsx      ← Analytics + timeline + insights
-    └── AgentLogsPage.jsx      ← Full agent reasoning trace
+    ├── CampaignBriefPage.jsx    ← Input + voice + historical learnings
+    ├── ApprovalPage.jsx         ← Review & approve/reject
+    ├── DashboardPage.jsx        ← Analytics + timeline + insights
+    └── AgentLogsPage.jsx        ← Full agent reasoning trace
 ```
 
 ---
@@ -90,12 +90,13 @@ src/
 ### Backend Architecture
 ```
 backend/
-├── main.py                    ← FastAPI app entry point
-├── database.py                ← SQLAlchemy session factory
-├── models.py                  ← 7 ORM models
-├── schemas.py                 ← Pydantic request/response schemas
+├── main.py                      ← FastAPI app entry point
+├── config.py                    ← Pydantic Settings (reads .env)
+├── database.py                  ← SQLAlchemy session factory
+├── models.py                    ← 7 ORM models
+├── schemas.py                   ← Pydantic request/response schemas
 ├── agents/
-│   ├── base_agent.py          ← Shared OpenAI client + JSON completion
+│   ├── base_agent.py            ← Shared OpenAI client + JSON completion
 │   ├── campaign_brief_agent.py
 │   ├── segmentation_agent.py
 │   ├── strategy_agent.py
@@ -105,7 +106,7 @@ backend/
 │   ├── optimization_agent.py
 │   └── insight_agent.py
 ├── orchestrator/
-│   └── agent_orchestrator.py  ← Pipeline engine with _run_agent() helper
+│   └── agent_orchestrator.py    ← Pipeline engine with _run_agent() helper
 ├── services/
 │   ├── campaign_service.py
 │   ├── analytics_service.py
@@ -114,11 +115,12 @@ backend/
 │   ├── segment_intelligence_service.py
 │   └── historical_learning_service.py
 ├── tools/
-│   ├── openapi.json           ← Dynamic API spec
-│   ├── openapi_loader.py      ← Spec parser
-│   └── dynamic_tool_registry.py ← Runtime tool execution
+│   ├── openapi.json             ← CampaignX API specification
+│   ├── openapi_loader.py        ← Spec parser
+│   ├── dynamic_tool_registry.py ← Runtime tool execution
+│   └── campaignx_api_client.py  ← Centralized async API client
 └── custom_logging/
-    └── agent_logger.py        ← Progressive agent logging
+    └── agent_logger.py          ← Progressive agent logging
 ```
 
 ---
@@ -185,9 +187,10 @@ backend/
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `OPENAI_API_KEY` | ✅ Yes | `dummy` (mock mode) | Powers all 8 AI agents |
-| `DATABASE_URL` | ❌ No | `sqlite:///campaignx.db` | Database connection |
-| `SUPERBFSI_API_KEY` | ❌ No | `mock_key` | External API authentication |
+| `OPENAI_API_KEY` | ✅ Yes | `""` | Powers all 8 AI agents |
+| `DATABASE_URL` | ❌ No | `sqlite:///./campaignx.db` | Database connection |
+| `CAMPAIGNX_API_KEY` | ❌ No | `""` | External API authentication |
+| `CAMPAIGNX_BASE_URL` | ❌ No | `https://campaignx.superb.ai` | External API base URL |
 
 ### Quick Start
 ```bash

@@ -5,24 +5,20 @@ Centralized async HTTP client for the external CampaignX API.
 Handles authentication, customer cohort retrieval, campaign dispatch, and report fetching.
 """
 
-import os
 import logging
 from typing import Dict, Any, List, Optional
 import httpx
+from config import settings
 
 logger = logging.getLogger(__name__)
-
-# Base URL for the CampaignX external API
-CAMPAIGNX_BASE_URL = os.getenv("CAMPAIGNX_BASE_URL", "https://campaignx.superb.ai")
-CAMPAIGNX_API_KEY = os.getenv("CAMPAIGNX_API_KEY", "")
 
 
 class CampaignXAPIClient:
     """Async client for the CampaignX external API."""
 
     def __init__(self, api_key: str = "", base_url: str = ""):
-        self.base_url = base_url or CAMPAIGNX_BASE_URL
-        self.api_key = api_key or CAMPAIGNX_API_KEY
+        self.base_url = base_url or settings.CAMPAIGNX_BASE_URL
+        self.api_key = api_key or settings.CAMPAIGNX_API_KEY
         self.headers = {
             "X-API-Key": self.api_key,
             "Content-Type": "application/json",

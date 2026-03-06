@@ -1,8 +1,8 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional, Any
 from datetime import datetime
 
-# Common
+# Common base class for ORM models
 class ORMBase(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -28,7 +28,7 @@ class SegmentBase(BaseModel):
 class SegmentResponse(SegmentBase, ORMBase):
     id: int
     campaign_id: int
-    customer_ids: Optional[Any] = None # Or string if returning JSON
+    customer_ids: Optional[Any] = None
     variants: List[EmailVariantResponse] = []
 
 # Campaign
@@ -48,18 +48,16 @@ class CampaignResponse(CampaignBase, ORMBase):
     segments: List[SegmentResponse] = []
 
 # Performance Metrics
-class PerformanceMetricResponse(BaseModel):
+class PerformanceMetricResponse(ORMBase):
     id: int
     run_id: int
     segment_id: int
     variant_id: int
     open_rate: float
     click_rate: float
-    class Config:
-        from_attributes = True
 
 # Campaign Run
-class CampaignRunResponse(BaseModel):
+class CampaignRunResponse(ORMBase):
     id: int
     campaign_id: int
     loop_index: int
@@ -68,29 +66,23 @@ class CampaignRunResponse(BaseModel):
     scheduled_time: Optional[datetime]
     executed_time: Optional[datetime]
     metrics: List[PerformanceMetricResponse] = []
-    class Config:
-        from_attributes = True
 
 # Agent Log
-class AgentLogResponse(BaseModel):
+class AgentLogResponse(ORMBase):
     id: int
     campaign_id: Optional[int]
     agent_name: str
     input_data: Optional[str]
     output_data: Optional[str]
     reasoning_summary: Optional[str]
-    status: Optional[str] = "completed"  # 'running', 'completed', 'error'
-    action_description: Optional[str] = None  # Short human-readable action text
+    status: Optional[str] = "completed"
+    action_description: Optional[str] = None
     timestamp: Optional[datetime] = None
-    class Config:
-        from_attributes = True
 
 # Campaign Insight
-class CampaignInsightResponse(BaseModel):
+class CampaignInsightResponse(ORMBase):
     id: int
     campaign_id: int
     segment_name: str
     insight_content: str
     timestamp: datetime
-    class Config:
-        from_attributes = True
