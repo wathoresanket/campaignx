@@ -9,6 +9,7 @@ then dispatches through the DynamicToolRegistry.
 import json
 import logging
 import os
+import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
@@ -74,6 +75,44 @@ class ExecutionAgent(BaseAgent):
                         customer_ids = []
                 segments_map[seg_id] = customer_ids
 
+        async def _dispatch_variant(variant: Dict[str, Any], seg_id: str, customer_ids: List[str]):
+            subject = variant.get("subject", "Campaign Email")
+            body = variant.get("body", "")
+            send_time = variant.get("send_time", self._default_send_time())
+
+            logger.info(
+                f"Dispatching variant {variant.get('label', '?')} "
+                f"to {len(customer_ids)} customers in segment {seg_id} "
+                f"via dynamically discovered send_campaign tool"
+            )
+
+            # Execute via dynamic tool registry (discovered from OpenAPI spec)
+            result = await self.registry.execute(
+                "send_campaign_api_v1_send_campaign_post",
+                {
+                    "subject": subject,
+                    "body": body,
+                    "list_customer_ids": customer_ids,
+                    "send_time": send_time,
+                },
+            )
+
+            api_campaign_id = result.get("campaign_id")
+            if api_campaign_id:
+                logger.info(f"  → API campaign_id: {api_campaign_id}")
+            else:
+                logger.error(f"  → Send failed: {result}")
+
+            return {
+                "segment_id": seg_id,
+                "variant_label": variant.get("label", ""),
+                "api_campaign_id": api_campaign_id,
+                "send_time": send_time,
+                "customer_count": len(customer_ids),
+                "api_response": result.get("message", ""),
+            }
+
+        tasks = []
         for seg_id, variants in execution_plan.items():
             customer_ids = segments_map.get(seg_id, [])
             if not customer_ids:
@@ -81,41 +120,16 @@ class ExecutionAgent(BaseAgent):
                 continue
 
             for variant in variants:
-                subject = variant.get("subject", "Campaign Email")
-                body = variant.get("body", "")
-                send_time = variant.get("send_time", self._default_send_time())
+                tasks.append(_dispatch_variant(variant, seg_id, customer_ids))
 
-                logger.info(
-                    f"Dispatching variant {variant.get('label', '?')} "
-                    f"to {len(customer_ids)} customers in segment {seg_id} "
-                    f"via dynamically discovered send_campaign tool"
-                )
+        if tasks:
+            sent_campaigns = await asyncio.gather(*tasks)
 
-                # Execute via dynamic tool registry (discovered from OpenAPI spec)
-                result = await self.registry.execute(
-                    "send_campaign_api_v1_send_campaign_post",
-                    {
-                        "subject": subject,
-                        "body": body,
-                        "list_customer_ids": customer_ids,
-                        "send_time": send_time,
-                    },
-                )
-
-                api_campaign_id = result.get("campaign_id")
-                sent_campaigns.append({
-                    "segment_id": seg_id,
-                    "variant_label": variant.get("label", ""),
-                    "api_campaign_id": api_campaign_id,
-                    "send_time": send_time,
-                    "customer_count": len(customer_ids),
-                    "api_response": result.get("message", ""),
-                })
-
-                if api_campaign_id:
-                    logger.info(f"  → API campaign_id: {api_campaign_id}")
-                else:
-                    logger.error(f"  → Send failed: {result}")
+        # Record dynamically executed tools for logging
+        self.api_calls_executed = {"send_campaign_api_v1_send_campaign_post": {
+            "invocations": len(sent_campaigns),
+            "endpoint": "/api/v1/send_campaign"
+        }}
 
         return {"sent_campaigns": sent_campaigns}
 

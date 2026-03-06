@@ -12,6 +12,7 @@ The database serves as a memory layer for internal state and history.
 import os
 import json
 import logging
+import asyncio
 from sqlalchemy.orm import Session
 
 from models import Campaign, CampaignRun, Segment
@@ -42,11 +43,11 @@ logger = logging.getLogger(__name__)
 # ── Helpers ────────────────────────────────────────────────────────────
 
 def _log(db, agent_name, campaign_id, input_data, output_data,
-         reasoning, status, action):
+         reasoning, status, action, api_calls=None):
     """Thin wrapper around log_agent_action to reduce call-site verbosity."""
     log_agent_action(
         db, agent_name, campaign_id, input_data, output_data,
-        reasoning, status=status, action_description=action,
+        reasoning, api_calls_executed=api_calls, status=status, action_description=action,
     )
 
 
@@ -91,152 +92,172 @@ class AgentOrchestrator:
 
     async def generate_campaign_plan(self, campaign_id: int):
         """Runs Brief → Segmentation → Strategy → Content, then waits for approval."""
-        campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
-        if not campaign:
-            raise ValueError("Campaign not found")
+        try:
+            campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
+            if not campaign:
+                raise ValueError("Campaign not found")
 
-        brief_text = campaign.brief
-        historical_ctx = self.learning_svc.get_learning_context_string()
+            brief_text = campaign.brief
+            historical_ctx = self.learning_svc.get_learning_context_string()
 
-        # 1. Parse brief
-        parsed_brief = await self._run_agent(
-            campaign_id, "CampaignBriefAgent",
-            self.brief_agent.run, [brief_text],
-            input_data={"brief": brief_text},
-            action_running="Parsing campaign brief",
-            action_done="Parsed campaign brief into structured data",
-        )
-        self.campaign_svc.save_parsed_brief(campaign_id, parsed_brief)
+            # 1. Parse brief
+            parsed_brief = await self._run_agent(
+                campaign_id, "CampaignBriefAgent",
+                self.brief_agent.run, [brief_text],
+                input_data={"brief": brief_text},
+                action_running="Parsing campaign brief",
+                action_done="Parsed campaign brief into structured data",
+            )
+            self.campaign_svc.save_parsed_brief(campaign_id, parsed_brief)
 
-        # 2. Fetch REAL customer cohort via dynamically discovered API tool
-        _log(self.db, "DataFetcher", campaign_id, {}, {},
-             "Fetching customer cohort via dynamic API discovery", "running",
-             "Fetching real customer cohort data")
+            # 2. Fetch REAL customer cohort via dynamically discovered API tool
+            _log(self.db, "DataFetcher", campaign_id, {}, {},
+                 "Fetching customer cohort via dynamic API discovery", "running",
+                 "Fetching real customer cohort data")
 
-        cohort_response = await self.tool_registry.execute(
-            "get_customer_cohort_api_v1_get_customer_cohort_get", {}
-        )
-        cohort_data = cohort_response.get("data", [])
+            cohort_response = await self.tool_registry.execute(
+                "get_customer_cohort_api_v1_get_customer_cohort_get", {}
+            )
+            cohort_data = cohort_response.get("data", [])
 
-        _log(self.db, "DataFetcher", campaign_id, {},
-             {"total_customers": len(cohort_data)},
-             f"Fetched {len(cohort_data)} customers via dynamic API discovery", "completed",
-             f"Retrieved {len(cohort_data)} customers from API")
+            _log(self.db, "DataFetcher", campaign_id, {},
+                 {"total_customers": len(cohort_data)},
+                 f"Fetched {len(cohort_data)} customers via dynamic API discovery", "completed",
+                 f"Retrieved {len(cohort_data)} customers from API",
+                 api_calls={"get_customer_cohort_api_v1_get_customer_cohort_get": {}})
 
-        # 3. Segment customers using REAL cohort data
-        segments = await self._run_agent(
-            campaign_id, "SegmentationAgent",
-            self.segmentation_agent.run, [parsed_brief],
-            kwargs={"cohort_data": cohort_data},
-            input_data={"parsed_brief": parsed_brief, "cohort_size": len(cohort_data)},
-            action_running="Creating micro-segments from real customer cohort",
-            action_done="Created customer micro-segments from real cohort data",
-        )
-        self.campaign_svc.save_segments(campaign_id, segments)
+            # 3. Segment customers using REAL cohort data
+            segments = await self._run_agent(
+                campaign_id, "SegmentationAgent",
+                self.segmentation_agent.run, [parsed_brief],
+                kwargs={"cohort_data": cohort_data},
+                input_data={"parsed_brief": parsed_brief, "cohort_size": len(cohort_data)},
+                action_running="Creating micro-segments from real customer cohort",
+                action_done="Created customer micro-segments from real cohort data",
+            )
+            self.campaign_svc.save_segments(campaign_id, segments)
 
-        # 4. Generate strategy (with historical learning)
-        strategies = await self._run_agent(
-            campaign_id, "StrategyAgent",
-            self.strategy_agent.run, [segments],
-            kwargs={"historical_context": historical_ctx},
-            input_data=segments,
-            action_running="Selecting optimal send times and A/B test plans",
-            action_done="Generated segment strategies with historical learning",
-        )
+            # 4. Generate strategy (with historical learning)
+            strategies = await self._run_agent(
+                campaign_id, "StrategyAgent",
+                self.strategy_agent.run, [segments],
+                kwargs={"historical_context": historical_ctx},
+                input_data=segments,
+                action_running="Selecting optimal send times and A/B test plans",
+                action_done="Generated segment strategies with historical learning",
+            )
 
-        # 5. Generate email content (with historical learning)
-        variants = await self._run_agent(
-            campaign_id, "ContentAgent",
-            self.content_agent.run, [parsed_brief, strategies],
-            kwargs={"historical_context": historical_ctx},
-            input_data=strategies,
-            action_running="Generating A/B email variants",
-            action_done="Generated email variants for all segments",
-        )
-        self.campaign_svc.save_variants(campaign_id, variants)
+            # 5. Generate email content (with historical learning)
+            variants = await self._run_agent(
+                campaign_id, "ContentAgent",
+                self.content_agent.run, [parsed_brief, strategies],
+                kwargs={"historical_context": historical_ctx},
+                input_data=strategies,
+                action_running="Generating A/B email variants",
+                action_done="Generated email variants for all segments",
+            )
+            self.campaign_svc.save_variants(campaign_id, variants)
 
-        self.campaign_svc.update_status(campaign_id, "pending_approval")
-        logger.info(f"Campaign {campaign_id} plan generated — awaiting approval.")
+            self.campaign_svc.update_status(campaign_id, "pending_approval")
+            logger.info(f"Campaign {campaign_id} plan generated — awaiting approval.")
+            
+            if settings.DEMO_MODE:
+                logger.info("DEMO_MODE enabled. Finished campaign generation phase rapidly.")
+        except Exception as e:
+            logger.error(f"Error generating plan for campaign {campaign_id}: {e}")
+            self.campaign_svc.update_status(campaign_id, "failed")
+            _log(self.db, "Orchestrator", campaign_id, {}, {"error": str(e)},
+                 f"Campaign planning failed: {e}", "error", "Campaign plan generation failed")
 
     # ── Run Phase (execution → optimization loop → insights) ───────
 
     async def execute_and_optimize(self, campaign_id: int, max_loops: int = 3):
         """Runs execution, analytics, and MAB optimization in a loop, then generates insights."""
-        self.campaign_svc.update_status(campaign_id, "running")
+        try:
+            self.campaign_svc.update_status(campaign_id, "running")
 
-        campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
-        execution_plan, segments_info = self._build_execution_plan(campaign)
+            campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
+            execution_plan, segments_info = self._build_execution_plan(campaign)
 
-        previous_metrics = None
+            previous_metrics = None
 
-        for loop in range(1, max_loops + 1):
-            logger.info(f"Campaign {campaign_id} — optimization loop {loop}/{max_loops}")
-            run = self.analytics_svc.create_run(campaign_id, loop)
+            for loop in range(1, max_loops + 1):
+                logger.info(f"Campaign {campaign_id} — optimization loop {loop}/{max_loops}")
+                run = self.analytics_svc.create_run(campaign_id, loop)
 
-            # 5. Execute campaign via REAL send_campaign API
-            exec_result = await self._run_agent(
-                campaign_id, "ExecutionAgent",
-                self.execution_agent.run, [execution_plan],
-                kwargs={"segments_with_ids": segments_info},
-                input_data=execution_plan,
-                action_running=f"Dispatching campaign emails via API (loop {loop})",
-                action_done=f"Campaign dispatched via real API (loop {loop})",
+                # 5. Execute campaign via REAL send_campaign API
+                exec_result = await self._run_agent(
+                    campaign_id, "ExecutionAgent",
+                    self.execution_agent.run, [execution_plan],
+                    kwargs={"segments_with_ids": segments_info},
+                    input_data=execution_plan,
+                    action_running=f"Dispatching campaign emails via API (loop {loop})",
+                    action_done=f"Campaign dispatched via real API (loop {loop})",
+                )
+
+                # Store each api_campaign_id on the run for later report lookup
+                sent_campaigns = exec_result.get("sent_campaigns", [])
+                api_campaign_ids = [
+                    sc["api_campaign_id"] for sc in sent_campaigns
+                    if sc.get("api_campaign_id")
+                ]
+                if api_campaign_ids:
+                    run.api_campaign_id = json.dumps(api_campaign_ids)
+                    self.db.commit()
+
+                # 6. Collect REAL metrics via get_report API
+                metrics = await self._run_agent(
+                    campaign_id, "AnalyticsAgent",
+                    self.analytics_agent.run, [sent_campaigns],
+                    kwargs={"previous_metrics": previous_metrics},
+                    action_running=f"Fetching real engagement reports from API (loop {loop})",
+                    action_done=f"Computed open/click rates from real reports (loop {loop})",
+                )
+                self.analytics_svc.save_metrics(run.id, metrics)
+
+                # 7. Optimize
+                opt_decision = await self._run_agent(
+                    campaign_id, "OptimizationAgent",
+                    self.optimization_agent.run, [metrics],
+                    input_data=metrics,
+                    action_running=f"Running MAB optimization (loop {loop})",
+                    action_done=f"Updated strategy via MAB results (loop {loop})",
+                )
+                self.optimization_svc.save_optimization_decisions(run.id, opt_decision)
+
+                if opt_decision.get("stop_optimization") or loop == max_loops:
+                    logger.info(f"Optimization complete for campaign {campaign_id} at loop {loop}.")
+                    break
+                previous_metrics = metrics
+                
+                if not settings.DEMO_MODE:
+                    logger.info(f"Waiting 15 seconds before next optimization loop...")
+                    await asyncio.sleep(15)
+
+            # 8. Generate insights from all run data
+            all_metrics = self._compile_all_metrics(campaign_id)
+            insights = await self._run_agent(
+                campaign_id, "InsightAgent",
+                self.insight_agent.run, [all_metrics],
+                input_data={"raw_metrics": all_metrics},
+                action_running="Generating campaign insights from real metrics",
+                action_done="Generated actionable marketing insights",
             )
+            self.insight_svc.save_insights_batch(campaign_id, insights)
 
-            # Store each api_campaign_id on the run for later report lookup
-            sent_campaigns = exec_result.get("sent_campaigns", [])
-            api_campaign_ids = [
-                sc["api_campaign_id"] for sc in sent_campaigns
-                if sc.get("api_campaign_id")
-            ]
-            if api_campaign_ids:
-                run.api_campaign_id = json.dumps(api_campaign_ids)
-                self.db.commit()
-
-            # 6. Collect REAL metrics via get_report API
-            metrics = await self._run_agent(
-                campaign_id, "AnalyticsAgent",
-                self.analytics_agent.run, [sent_campaigns],
-                kwargs={"previous_metrics": previous_metrics},
-                action_running=f"Fetching real engagement reports from API (loop {loop})",
-                action_done=f"Computed open/click rates from real reports (loop {loop})",
-            )
-            self.analytics_svc.save_metrics(run.id, metrics)
-
-            # 7. Optimize
-            opt_decision = await self._run_agent(
-                campaign_id, "OptimizationAgent",
-                self.optimization_agent.run, [metrics],
-                input_data=metrics,
-                action_running=f"Running MAB optimization (loop {loop})",
-                action_done=f"Updated strategy via MAB results (loop {loop})",
-            )
-            self.optimization_svc.save_optimization_decisions(run.id, opt_decision)
-
-            if opt_decision.get("stop_optimization") or loop == max_loops:
-                logger.info(f"Optimization complete for campaign {campaign_id} at loop {loop}.")
-                break
-            previous_metrics = metrics
-
-        # 8. Generate insights from all run data
-        all_metrics = self._compile_all_metrics(campaign_id)
-        insights = await self._run_agent(
-            campaign_id, "InsightAgent",
-            self.insight_agent.run, [all_metrics],
-            input_data={"raw_metrics": all_metrics},
-            action_running="Generating campaign insights from real metrics",
-            action_done="Generated actionable marketing insights",
-        )
-        self.insight_svc.save_insights_batch(campaign_id, insights)
-
-        self.campaign_svc.update_status(campaign_id, "completed")
-        logger.info(f"Campaign {campaign_id} fully executed and optimized.")
+            self.campaign_svc.update_status(campaign_id, "completed")
+            logger.info(f"Campaign {campaign_id} fully executed and optimized.")
+        except Exception as e:
+            logger.error(f"Error executing/optimizing campaign {campaign_id}: {e}")
+            self.campaign_svc.update_status(campaign_id, "failed")
+            _log(self.db, "Orchestrator", campaign_id, {}, {"error": str(e)},
+                 f"Campaign execution sequence failed: {e}", "error", "Campaign execution failed")
 
     # ── Internal Helpers ───────────────────────────────────────────
 
     async def _run_agent(self, campaign_id, agent_name, fn, args,
                          kwargs=None, input_data=None,
-                         action_running="", action_done=""):
+                         action_running="", action_done="", api_calls=None):
         """
         Wraps every agent call with 'running' → execute → 'completed' logging.
         Reduces the 4-line log+call+log+save pattern to a single call.
@@ -246,9 +267,12 @@ class AgentOrchestrator:
 
         result = await fn(*args, **(kwargs or {}))
 
+        # We can extract api_calls from the agent instance if it exposes them, otherwise default to None
+        calls_used = api_calls or getattr(fn.__self__, 'api_calls_executed', None)
+
         _log(self.db, agent_name, campaign_id,
              input_data or {}, result,
-             f"Finished {agent_name}", "completed", action_done)
+             f"Finished {agent_name}", "completed", action_done, api_calls=calls_used)
         return result
 
     @staticmethod
@@ -299,79 +323,88 @@ class AgentOrchestrator:
         Injects the feedback into Strategy and Content agent prompts
         so the LLM can generate improved variants.
         """
-        campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
-        if not campaign:
-            raise ValueError("Campaign not found")
+        try:
+            campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
+            if not campaign:
+                raise ValueError("Campaign not found")
 
-        self.campaign_svc.update_status(campaign_id, "generating")
+            self.campaign_svc.update_status(campaign_id, "generating")
 
-        _log(self.db, "Orchestrator", campaign_id, {"feedback": feedback}, {},
-             f"Regenerating campaign plan with feedback: {feedback}", "running",
-             "Re-generating campaign based on human feedback")
+            _log(self.db, "Orchestrator", campaign_id, {"feedback": feedback}, {},
+                 f"Regenerating campaign plan with feedback: {feedback}", "running",
+                 "Re-generating campaign based on human feedback")
 
-        brief_text = campaign.brief
-        historical_ctx = self.learning_svc.get_learning_context_string()
+            brief_text = campaign.brief
+            historical_ctx = self.learning_svc.get_learning_context_string()
 
-        # Add rejection feedback to historical context
-        feedback_context = (
-            f"\n\nHUMAN FEEDBACK (previous plan was rejected):\n{feedback}\n"
-            f"Please address this feedback in the new plan."
-        )
-        enriched_ctx = historical_ctx + feedback_context
+            # Add rejection feedback to historical context
+            feedback_context = (
+                f"\n\nHUMAN FEEDBACK (previous plan was rejected):\n{feedback}\n"
+                f"Please address this feedback in the new plan."
+            )
+            enriched_ctx = historical_ctx + feedback_context
 
-        # Re-parse brief (same as original)
-        parsed_brief = await self._run_agent(
-            campaign_id, "CampaignBriefAgent",
-            self.brief_agent.run, [brief_text],
-            input_data={"brief": brief_text, "regeneration": True},
-            action_running="Re-parsing campaign brief",
-            action_done="Re-parsed campaign brief",
-        )
-        self.campaign_svc.save_parsed_brief(campaign_id, parsed_brief)
+            # Re-parse brief (same as original)
+            parsed_brief = await self._run_agent(
+                campaign_id, "CampaignBriefAgent",
+                self.brief_agent.run, [brief_text],
+                input_data={"brief": brief_text, "regeneration": True},
+                action_running="Re-parsing campaign brief",
+                action_done="Re-parsed campaign brief",
+            )
+            self.campaign_svc.save_parsed_brief(campaign_id, parsed_brief)
 
-        # Fetch cohort again via dynamic API discovery
-        cohort_response = await self.tool_registry.execute(
-            "get_customer_cohort_api_v1_get_customer_cohort_get", {}
-        )
-        cohort_data = cohort_response.get("data", [])
+            # Fetch cohort again via dynamic API discovery
+            cohort_response = await self.tool_registry.execute(
+                "get_customer_cohort_api_v1_get_customer_cohort_get", {}
+            )
+            cohort_data = cohort_response.get("data", [])
+            _log(self.db, "DataFetcher", campaign_id, {}, {"total_customers": len(cohort_data)},
+                 "Re-fetched customer cohort", "completed", "Re-fetched cohort",
+                 api_calls={"get_customer_cohort_api_v1_get_customer_cohort_get": {}})
 
-        # Re-segment
-        segments = await self._run_agent(
-            campaign_id, "SegmentationAgent",
-            self.segmentation_agent.run, [parsed_brief],
-            kwargs={"cohort_data": cohort_data},
-            input_data={"parsed_brief": parsed_brief, "cohort_size": len(cohort_data)},
-            action_running="Re-segmenting customers with feedback",
-            action_done="Re-created segments incorporating feedback",
-        )
-        self.campaign_svc.save_segments(campaign_id, segments)
+            # Re-segment
+            segments = await self._run_agent(
+                campaign_id, "SegmentationAgent",
+                self.segmentation_agent.run, [parsed_brief],
+                kwargs={"cohort_data": cohort_data},
+                input_data={"parsed_brief": parsed_brief, "cohort_size": len(cohort_data)},
+                action_running="Re-segmenting customers with feedback",
+                action_done="Re-created segments incorporating feedback",
+            )
+            self.campaign_svc.save_segments(campaign_id, segments)
 
-        # Re-generate strategy (with feedback injected)
-        strategies = await self._run_agent(
-            campaign_id, "StrategyAgent",
-            self.strategy_agent.run, [segments],
-            kwargs={"historical_context": enriched_ctx},
-            input_data=segments,
-            action_running="Regenerating strategy with human feedback",
-            action_done="Generated improved strategy based on feedback",
-        )
+            # Re-generate strategy (with feedback injected)
+            strategies = await self._run_agent(
+                campaign_id, "StrategyAgent",
+                self.strategy_agent.run, [segments],
+                kwargs={"historical_context": enriched_ctx},
+                input_data=segments,
+                action_running="Regenerating strategy with human feedback",
+                action_done="Generated improved strategy based on feedback",
+            )
 
-        # Re-generate content (with feedback injected)
-        variants = await self._run_agent(
-            campaign_id, "ContentAgent",
-            self.content_agent.run, [parsed_brief, strategies],
-            kwargs={"historical_context": enriched_ctx},
-            input_data=strategies,
-            action_running="Regenerating email variants based on feedback",
-            action_done="Generated improved email variants",
-        )
-        self.campaign_svc.save_variants(campaign_id, variants)
+            # Re-generate content (with feedback injected)
+            variants = await self._run_agent(
+                campaign_id, "ContentAgent",
+                self.content_agent.run, [parsed_brief, strategies],
+                kwargs={"historical_context": enriched_ctx},
+                input_data=strategies,
+                action_running="Regenerating email variants based on feedback",
+                action_done="Generated improved email variants",
+            )
+            self.campaign_svc.save_variants(campaign_id, variants)
 
-        # Update status back to pending_approval
-        self.campaign_svc.update_status(campaign_id, "pending_approval")
+            # Update status back to pending_approval
+            self.campaign_svc.update_status(campaign_id, "pending_approval")
 
-        _log(self.db, "Orchestrator", campaign_id,
-             {"feedback": feedback}, {"variants_count": len(variants)},
-             "Campaign plan regenerated successfully", "completed",
-             "Regeneration complete — awaiting re-approval")
+            _log(self.db, "Orchestrator", campaign_id,
+                 {"feedback": feedback}, {"variants_count": len(variants)},
+                 "Campaign plan regenerated successfully", "completed",
+                 "Regeneration complete — awaiting re-approval")
+        except Exception as e:
+            logger.error(f"Error regenerating plan for campaign {campaign_id}: {e}")
+            self.campaign_svc.update_status(campaign_id, "failed")
+            _log(self.db, "Orchestrator", campaign_id, {}, {"error": str(e)},
+                 f"Campaign regeneration failed: {e}", "error", "Campaign plan regeneration failed")
 

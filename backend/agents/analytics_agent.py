@@ -9,6 +9,7 @@ Computes open_rate and click_rate from raw EO/EC flags.
 
 import os
 import logging
+import asyncio
 from typing import Dict, Any, List
 
 from config import settings
@@ -55,14 +56,14 @@ class AnalyticsAgent:
         logger.info(f"Fetching reports for {len(sent_campaigns)} dispatched campaigns via dynamic API discovery...")
         results = []
 
-        for campaign in sent_campaigns:
+        async def _fetch_report(campaign: Dict[str, Any]):
             api_campaign_id = campaign.get("api_campaign_id")
             segment_name = campaign.get("segment_name", campaign.get("segment_id", "unknown"))
             variant_label = campaign.get("variant_label", "?")
 
             if not api_campaign_id:
                 logger.warning(f"No api_campaign_id for {segment_name}/{variant_label}, skipping report")
-                results.append({
+                return {
                     "segment_name": str(segment_name),
                     "variant_label": variant_label,
                     "open_rate": 0.0,
@@ -71,8 +72,7 @@ class AnalyticsAgent:
                     "total_opened": 0,
                     "total_clicked": 0,
                     "api_campaign_id": None,
-                })
-                continue
+                }
 
             # Fetch report via dynamic tool registry (discovered from OpenAPI spec)
             report = await self.registry.execute(
@@ -82,8 +82,6 @@ class AnalyticsAgent:
             report_data = report.get("data", [])
 
             # Compute rates from raw EO/EC flags
-            # Formula: open_rate = count(EO="Y") / total_rows
-            #          click_rate = count(EC="Y") / total_rows
             rates = self.compute_rates(report_data)
 
             total_sent = len(report_data)
@@ -96,7 +94,7 @@ class AnalyticsAgent:
                 f"({total_sent} sent)"
             )
 
-            results.append({
+            return {
                 "segment_name": str(segment_name),
                 "variant_label": variant_label,
                 "open_rate": rates["open_rate"],
@@ -105,8 +103,13 @@ class AnalyticsAgent:
                 "total_opened": total_opened,
                 "total_clicked": total_clicked,
                 "api_campaign_id": api_campaign_id,
-            })
+            }
 
+        tasks = [_fetch_report(campaign) for campaign in sent_campaigns]
+        
+        if tasks:
+            results = await asyncio.gather(*tasks)
+            
         return results
 
     @staticmethod

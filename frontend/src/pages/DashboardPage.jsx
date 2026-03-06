@@ -12,7 +12,8 @@ import MetricsChart from '../components/MetricsChart';
 import AgentLogsPanel from '../components/AgentLogsPanel';
 import OptimizationTimelineChart from '../components/OptimizationTimelineChart';
 import CampaignTimeline from '../components/CampaignTimeline';
-import { Activity, IterationCcw, Download, Lightbulb } from 'lucide-react';
+import { Activity, IterationCcw, Download, Lightbulb, PieChart } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function DashboardPage() {
     const { id } = useParams();
@@ -32,11 +33,11 @@ export default function DashboardPage() {
                 backendClient.get(`/campaigns/${id}/logs`).catch(() => ({ data: [] })),
                 backendClient.get(`/campaigns/${id}`).catch(() => ({ data: null })),
             ]);
-            setRuns(runsResp.data);
-            setInsights(insightsResp.data);
-            setTimeline(timelineResp.data.timeline || []);
-            setLogs(logsResp.data);
-            setCampaign(campaignResp.data);
+            setRuns(runsResp.data || []);
+            setInsights(insightsResp.data || []);
+            setTimeline(timelineResp.data?.timeline || []);
+            setLogs(logsResp.data || []);
+            setCampaign(campaignResp.data || null);
         } catch (e) {
             console.error(e);
         } finally {
@@ -73,13 +74,22 @@ export default function DashboardPage() {
                 <div>
                     <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center">
                         <Activity className="mr-2 h-5 w-5 text-blue-500" />
-                        Performance & MAB Optimization Dashboard
+                        Campaign Execution Dashboard
                     </h3>
-                    <p className="mt-1 text-sm text-gray-500">Live multi-armed bandit optimization results across runs.</p>
+                    <p className="mt-1 text-sm text-gray-500">View overall execution progression and status.</p>
                 </div>
-                <div className="flex bg-blue-50 p-2 rounded items-center">
-                    <IterationCcw className="text-blue-600 h-5 w-5 mr-2" />
-                    <span className="text-blue-800 font-semibold">{runs.length} / 3 Loops Completed</span>
+                <div className="flex space-x-4">
+                    <div className="flex bg-blue-50 p-2 rounded items-center">
+                        <IterationCcw className="text-blue-600 h-5 w-5 mr-2" />
+                        <span className="text-blue-800 font-semibold">{runs.length} / 3 Loops Completed</span>
+                    </div>
+                    <Link
+                        to={`/campaign/${id}/analytics`}
+                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                        <PieChart className="mr-2 h-5 w-5" />
+                        Open Live Analytics Engine
+                    </Link>
                 </div>
             </div>
 

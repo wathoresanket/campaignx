@@ -37,3 +37,12 @@ build/
 .idea/
 *.swp
 *.swo
+
+# Logs
+*.log
+backend/backend.log
+frontend/frontend.log
+
+# Agent data
+.agent*
+.gemini/

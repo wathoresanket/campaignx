@@ -11,7 +11,11 @@ class InsightService:
             insight = CampaignInsight(
                 campaign_id=campaign_id,
                 segment_name=item.get("segment_name", "Unknown"),
-                insight_content=item.get("insight_content", "")
+                top_segment=item.get("top_segment", ""),
+                winning_subject_pattern=item.get("winning_subject_pattern", ""),
+                best_send_time=item.get("best_send_time", ""),
+                key_insight=item.get("key_insight", ""),
+                recommendation=item.get("recommendation", "")
             )
             self.db.add(insight)
         self.db.commit()

@@ -18,19 +18,23 @@ class InsightAgent(BaseAgent):
         into human-readable marketing insights per segment.
         """
         prompt = f"""
-        You are an expert marketing data analyst. Review the automated campaign metrics below and generate 1-2 powerful insights per segment.
-        A good insight points out what performed best (send time, tone, emoji usage) and calculates differences or wins (e.g., 'Best Email Variant: B', 'Top Click Rate: 14%').
+        You are an expert marketing data analyst. Review the automated campaign metrics below and generate powerful, highly structured insights per segment.
+        A good insight points out exactly what performed best (send time, tone, subject pattern) and calculates wins (e.g. 'Best Email Variant: B', 'Top Click Rate: 14%').
         
         Metrics:
         {json.dumps(metrics, indent=2)}
         
-        Output a JSON object with the key "insights", which is a list of objects containing:
-        - "segment_name": string
-        - "insight_content": string (the human readable insight summarizing the best variant and performance)
+        Provide the following details for each segment:
+        - top_segment: What demographic or profile this specific segment represents
+        - winning_subject_pattern: What specific phrase, style, or inclusion made the best subject line win
+        - best_send_time: Optimal delivery time discovered
+        - key_insight: A 1-2 sentence human-readable takeaway summarizing performance
+        - recommendation: What to do in the next campaign for this segment
         """
         try:
-            result = await self._complete_json(prompt)
-            return result.get("insights", [])
+            from schemas import InsightsOutputSchema
+            result = await self._complete_pydantic(prompt, InsightsOutputSchema)
+            return [insight.model_dump() for insight in result.insights]
         except Exception as e:
             logger.error(f"InsightAgent failed: {e}")
             raise

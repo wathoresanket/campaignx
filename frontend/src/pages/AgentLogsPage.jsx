@@ -58,7 +58,7 @@ export default function AgentLogsPage() {
                         <p className="text-sm font-semibold text-gray-800 mb-2">Reasoning Summary</p>
                         <p className="text-sm text-gray-600 mb-4">{log.reasoning_summary}</p>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Input Data</p>
                                 <pre className="bg-gray-800 text-green-400 p-3 rounded text-xs overflow-x-auto h-32 whitespace-pre-wrap">
@@ -69,6 +69,12 @@ export default function AgentLogsPage() {
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Output Data</p>
                                 <pre className="bg-gray-800 text-blue-400 p-3 rounded text-xs overflow-x-auto h-32 whitespace-pre-wrap">
                                     {formatJson(log.output_data)}
+                                </pre>
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">API Tools Executed</p>
+                                <pre className="bg-gray-800 text-yellow-400 p-3 rounded text-xs overflow-x-auto h-32 whitespace-pre-wrap border border-yellow-700">
+                                    {log.api_calls_executed && log.api_calls_executed !== "{}" ? formatJson(log.api_calls_executed) : "No external generic tools executed"}
                                 </pre>
                             </div>
                         </div>

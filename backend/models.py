@@ -81,6 +81,7 @@ class AgentLog(Base):
     input_data = Column(Text, nullable=True) # JSON string
     output_data = Column(Text, nullable=True) # JSON string
     reasoning_summary = Column(Text, nullable=True)
+    api_calls_executed = Column(Text, nullable=True, default="{}") # JSON strictly
     status = Column(String, default="completed")  # 'running', 'completed', 'error'
     action_description = Column(String, nullable=True)  # Short human-readable action text
     timestamp = Column(DateTime, default=datetime.utcnow)
@@ -93,7 +94,11 @@ class CampaignInsight(Base):
     id = Column(Integer, primary_key=True, index=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"))
     segment_name = Column(String, index=True)
-    insight_content = Column(Text) # The generated text insight
+    top_segment = Column(String, nullable=True)
+    winning_subject_pattern = Column(String, nullable=True)
+    best_send_time = Column(String, nullable=True)
+    key_insight = Column(Text, nullable=True)
+    recommendation = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     
     campaign = relationship("Campaign", backref="insights")

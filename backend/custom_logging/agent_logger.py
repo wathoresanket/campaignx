@@ -9,6 +9,7 @@ def log_agent_action(
     input_data: dict,
     output_data: dict,
     reasoning_summary: str,
+    api_calls_executed: dict = None,
     status: str = "completed",
     action_description: str = None,
 ):
@@ -23,6 +24,7 @@ def log_agent_action(
         input_data=json.dumps(input_data) if isinstance(input_data, dict) else str(input_data),
         output_data=json.dumps(output_data) if isinstance(output_data, dict) else str(output_data),
         reasoning_summary=reasoning_summary,
+        api_calls_executed=json.dumps(api_calls_executed) if api_calls_executed else "{}",
         status=status,
         action_description=action_description or reasoning_summary,
     )

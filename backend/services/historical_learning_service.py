@@ -40,7 +40,7 @@ class HistoricalLearningService(BaseAgent):
             {
                 "campaign_id": ins.campaign_id,
                 "segment": ins.segment_name,
-                "insight": ins.insight_content,
+                "insight": ins.key_insight,
             }
             for ins in all_insights[:50]
         ]
@@ -82,7 +82,7 @@ class HistoricalLearningService(BaseAgent):
             return ""
 
         lines = ["Historical Campaign Learning:"]
-        lines.extend(f"- [{ins.segment_name}] {ins.insight_content}" for ins in insights)
+        lines.extend(f"- [{ins.segment_name}] {ins.key_insight}" for ins in insights)
         lines.append("\nUse these insights to inform your strategy and content generation.")
         return "\n".join(lines)
 

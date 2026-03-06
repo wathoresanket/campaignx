@@ -36,29 +36,27 @@ class SegmentationAgent(BaseAgent):
 
         # Step 1: Ask LLM to define segment RULES (not assign individual customers)
         prompt = f"""
-        You are a customer segmentation expert. Based on the campaign brief and 
-        customer cohort summary below, define 3-4 micro-segment RULES.
+        You are an advanced customer segmentation expert. 
+        Based on the campaign brief and customer cohort summary below, define 4-6 highly specific micro-segment RULES.
 
+        Instead of broad groups, build micro-segments combining factors like:
+        - age group
+        - gender
+        - investment profile
+        - engagement history
+        
+        Examples of good micro-segments: "young professionals", "senior citizens", "female senior citizens", "inactive high-net-worth customers".
+        
         Campaign Brief:
         {json.dumps(parsed_brief, indent=2)}
 
         Customer Cohort Summary:
         {cohort_summary}
-
-        Output a JSON object with key "segments" containing a list of objects:
-        - "name": string (descriptive segment name)
-        - "field": string (the customer field to segment on, e.g. "Occupation", "Age", "Gender", "City")
-        - "values": list of strings (values of that field that belong to this segment)
-        - "catch_all": boolean (if true, this segment catches all remaining unassigned customers)
-
-        Rules:
-        - Use ONLY fields that exist in the cohort data (listed above).
-        - Exactly one segment should have "catch_all": true to ensure full cohort coverage.
-        - Every customer must belong to exactly one segment.
         """
         try:
-            result = await self._complete_json(prompt)
-            segment_rules = result.get("segments", [])
+            from schemas import SegmentationRulesSchema
+            result = await self._complete_pydantic(prompt, SegmentationRulesSchema)
+            segment_rules = [rule.model_dump() for rule in result.segments]
             logger.info(f"LLM defined {len(segment_rules)} segment rules")
 
             # Step 2: Apply rules to assign all customers (no LLM needed — instant)

@@ -1,3 +1,4 @@
+import json
 from sqlalchemy.orm import Session
 from models import Campaign, Segment, EmailVariant
 from schemas import CampaignBriefRequest
@@ -18,7 +19,7 @@ class CampaignService:
         if campaign:
             campaign.product = parsed_data.get("product")
             campaign.constraints = parsed_data.get("constraints")
-            campaign.target_segments = str(parsed_data.get("target_segments"))
+            campaign.target_segments = json.dumps(parsed_data.get("target_segments", []))
             campaign.tone = parsed_data.get("tone")
             campaign.optimization_goal = parsed_data.get("optimization_goal")
             campaign.cta_url = parsed_data.get("cta_url")

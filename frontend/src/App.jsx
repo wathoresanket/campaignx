@@ -3,6 +3,7 @@ import { Routes, Route, Link } from 'react-router-dom';
 import CampaignBriefPage from './pages/CampaignBriefPage';
 import ApprovalPage from './pages/ApprovalPage';
 import DashboardPage from './pages/DashboardPage';
+import CampaignAnalyticsDashboard from './pages/CampaignAnalyticsDashboard';
 import AgentLogsPage from './pages/AgentLogsPage';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
           <Route path="/" element={<CampaignBriefPage />} />
           <Route path="/campaign/:id/approval" element={<ApprovalPage />} />
           <Route path="/campaign/:id/dashboard" element={<DashboardPage />} />
+          <Route path="/campaign/:id/analytics" element={<CampaignAnalyticsDashboard />} />
           <Route path="/logs" element={<AgentLogsPage />} />
         </Routes>
       </main>

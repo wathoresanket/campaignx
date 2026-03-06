@@ -5,6 +5,7 @@ CampaignBriefAgent — Parses natural-language briefs into structured JSON.
 import logging
 from typing import Dict, Any
 from agents.base_agent import BaseAgent
+from schemas import BriefOutputSchema
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,8 @@ class CampaignBriefAgent(BaseAgent):
         "{brief_text}"
         """
         try:
-            return await self._complete_json(prompt, temperature=0.2)
+            parsed_data = await self._complete_pydantic(prompt, BriefOutputSchema, temperature=0.2)
+            return parsed_data.model_dump()
         except Exception as e:
             logger.error(f"CampaignBriefAgent failed: {e}")
             raise
