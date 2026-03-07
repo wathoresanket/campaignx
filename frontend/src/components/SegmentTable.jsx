@@ -2,7 +2,7 @@
  * SegmentTable.jsx
  * ────────────────
  * Displays campaign segments in a table with expandable
- * "Segment Intelligence" rows that show AI-generated explanations.
+ * "Segment Intelligence" rows that show contextual explanations.
  */
 
 import React, { useState, useEffect } from 'react';

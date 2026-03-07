@@ -94,7 +94,7 @@ class CampaignInsightResponse(CampaignInsightBase, ORMBase):
     campaign_id: int
     timestamp: datetime
 
-# Agent Outputs (For LLM Validation)
+# Agent Output Schemas (Structured Validation)
 class BriefOutputSchema(BaseModel):
     product: str
     constraints: str
@@ -106,8 +106,7 @@ class BriefOutputSchema(BaseModel):
 
 class SegmentRuleSchema(BaseModel):
     name: str
-    field: str
-    values: List[str]
+    condition: str
     catch_all: bool
 
 class SegmentationRulesSchema(BaseModel):

@@ -26,7 +26,7 @@ if settings.GROQ_API_KEY:
 
 class BaseAgent:
     """
-    Base class for all LLM-powered agents.
+    Base class for all intelligent agents.
     Uses Groq API.
     Subclasses inherit the client and call `_complete_json()`.
     """
@@ -37,7 +37,7 @@ class BaseAgent:
     async def _complete_json(self, prompt: str, temperature: float = 0.3) -> Dict[str, Any]:
         """
         Sends a structured-JSON completion request via Groq.
-        Returns the parsed JSON dict from the LLM response.
+        Returns the parsed JSON dict from the completion response.
         """
         if not groq_client:
             raise ValueError("GROQ_API_KEY is not configured in .env")
@@ -84,7 +84,7 @@ class BaseAgent:
             return schema(**raw_dict) if not hasattr(schema, "model_validate") else schema.model_validate(raw_dict)
             
         except (ValidationError, json.JSONDecodeError) as e:
-            logger.warning(f"Initial LLM response failed structure validation. Retrying once. Error: {e}")
+            logger.warning(f"Initial response failed structure validation. Retrying once. Error: {e}")
             
             # Retry Once
             retry_prompt = f"{full_prompt}\n\nWARNING: Your previous response failed validation with error: {e}. Please correct it and output raw JSON ONLY."

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class HistoricalLearningService(BaseAgent):
-    """Uses BaseAgent's LLM capabilities combined with DB access for historical analysis."""
+    """Uses BaseAgent's capabilities combined with DB access for historical analysis."""
 
     def __init__(self, db: Session):
         super().__init__()
@@ -24,7 +24,7 @@ class HistoricalLearningService(BaseAgent):
 
     async def get_learnings(self) -> List[Dict[str, str]]:
         """
-        Queries all past campaign insights, feeds them to the LLM,
+        Queries all past campaign insights, feeds them to the agent,
         and extracts recurring patterns and actionable learnings.
         """
         all_insights = (
@@ -70,7 +70,7 @@ class HistoricalLearningService(BaseAgent):
     def get_learning_context_string(self) -> str:
         """
         Synchronous method that builds a plain-text summary of past learnings
-        for injecting into agent prompts. Uses raw insights directly (no LLM).
+        for injecting into agent prompts. Uses raw insights directly (no extra processing).
         """
         insights = (
             self.db.query(CampaignInsight)

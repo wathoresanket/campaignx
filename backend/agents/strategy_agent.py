@@ -23,7 +23,7 @@ class StrategyAgent(BaseAgent):
         """
         history = self._build_history_section(historical_context)
 
-        # Strip customer_ids to keep prompt small — LLM only needs segment metadata
+        # Strip customer_ids to keep prompt small — only need segment metadata
         slim_segments = [
             {k: v for k, v in seg.items() if k != "customer_ids"}
             for seg in segments

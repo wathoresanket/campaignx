@@ -5,8 +5,8 @@ Segments customers into micro-groups based on the parsed brief and
 real customer cohort data from the CampaignX API.
 
 Uses a two-step approach:
-1. LLM defines segment rules (fast — small prompt)
-2. Python applies rules to full cohort (instant — no LLM needed)
+1. Defines segment rules from the campaign brief (fast — small prompt)
+2. Python applies rules to full cohort (instant — pure computation)
 """
 
 import json
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class SegmentationAgent(BaseAgent):
-    """Uses LLM to define segment rules, then applies them to the full cohort."""
+    """Defines segment rules from the brief, then applies them to the full cohort."""
 
     async def run(
         self,
@@ -28,13 +28,13 @@ class SegmentationAgent(BaseAgent):
     ) -> List[Dict[str, Any]]:
         """
         Two-step segmentation:
-        1. Ask LLM to define segment rules based on cohort summary (fast)
+        1. Define segment rules based on cohort summary (fast)
         2. Apply rules programmatically to assign all customers (instant)
         """
         customers = cohort_data or []
         cohort_summary = self._summarize_cohort(customers)
 
-        # Step 1: Ask LLM to define segment RULES (not assign individual customers)
+        # Step 1: Define segment RULES (not assign individual customers)
         prompt = f"""
         You are an advanced customer segmentation expert. 
         Based on the campaign brief and customer cohort summary below, define 4-6 highly specific micro-segment RULES.
@@ -47,6 +47,16 @@ class SegmentationAgent(BaseAgent):
         
         Examples of good micro-segments: "young professionals", "senior citizens", "female senior citizens", "inactive high-net-worth customers".
         
+        CRITICAL INSTRUCTION:
+        For each rule, you must provide a valid Python boolean expression string in the `condition` field.
+        The expression will be evaluated against a dictionary variable `c` representing one customer.
+        Use c.get('FieldName', default) syntax. Examples:
+        - Age filter: "c.get('Age', 0) >= 60"
+        - Gender filter: "c.get('Gender', '') == 'Male'"
+        - Combined: "c.get('Age', 0) >= 60 and c.get('Gender', '') == 'Female'"
+        - Income: "c.get('Monthly_Income', 0) > 200000"
+        For the catch_all segment, set condition to "True" and catch_all to true.
+        
         Campaign Brief:
         {json.dumps(parsed_brief, indent=2)}
 
@@ -57,9 +67,9 @@ class SegmentationAgent(BaseAgent):
             from schemas import SegmentationRulesSchema
             result = await self._complete_pydantic(prompt, SegmentationRulesSchema)
             segment_rules = [rule.model_dump() for rule in result.segments]
-            logger.info(f"LLM defined {len(segment_rules)} segment rules")
+            logger.info(f"Defined {len(segment_rules)} segment rules")
 
-            # Step 2: Apply rules to assign all customers (no LLM needed — instant)
+            # Step 2: Apply rules to assign all customers (instant)
             segments = self._apply_rules(segment_rules, customers)
             logger.info(f"Created {len(segments)} segments from {len(customers)} customers")
             return segments
@@ -72,7 +82,7 @@ class SegmentationAgent(BaseAgent):
         rules: List[Dict[str, Any]],
         customers: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Applies LLM-defined segment rules to assign all customers."""
+        """Applies segment rules to assign all customers."""
         assigned = set()
         segments = []
         catch_all_rule = None
@@ -83,19 +93,26 @@ class SegmentationAgent(BaseAgent):
                 catch_all_rule = rule
                 continue
 
-            field = rule.get("field", "")
-            values = [str(v).lower() for v in rule.get("values", [])]
+            condition_str = rule.get("condition", "True")
             name = rule.get("name", "Segment")
+            logger.info(f"Evaluating rule '{name}' with condition: {condition_str}")
 
             matching_ids = []
+            eval_errors = 0
             for c in customers:
                 cid = c.get("customer_id", "")
                 if cid in assigned:
                     continue
-                val = str(c.get(field, "")).lower()
-                if val in values:
-                    matching_ids.append(cid)
-                    assigned.add(cid)
+                try:
+                    if eval(condition_str, {"__builtins__": {}}, {"c": c}):
+                        matching_ids.append(cid)
+                        assigned.add(cid)
+                except Exception:
+                    eval_errors += 1
+
+            if eval_errors > 0:
+                logger.warning(f"Rule '{name}': {eval_errors} eval errors out of {len(customers)} customers")
+            logger.info(f"Rule '{name}': matched {len(matching_ids)} customers")
 
             if matching_ids:
                 segments.append({
@@ -122,7 +139,7 @@ class SegmentationAgent(BaseAgent):
     @staticmethod
     def _summarize_cohort(cohort_data: List[Dict[str, Any]]) -> str:
         """
-        Builds a compact statistical summary for the LLM prompt.
+        Builds a compact statistical summary for the segmentation prompt.
         Does NOT include individual customer IDs — just distributions.
         """
         if not cohort_data:

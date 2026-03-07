@@ -28,7 +28,7 @@ class OpenAPILoader:
         return current
 
     def extract_tools(self) -> tuple[List[Dict[str, Any]], Dict[str, dict]]:
-        """Converts OpenAPI paths to OpenAI tools format, and returns routing dictionary."""
+        """Converts OpenAPI paths to function-calling tools format, and returns routing dictionary."""
         tools = []
         routes = {}
         paths = self.spec.get("paths", {})

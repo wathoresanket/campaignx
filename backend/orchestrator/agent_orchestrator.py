@@ -321,7 +321,7 @@ class AgentOrchestrator:
         """
         Re-runs the plan phase incorporating human rejection feedback.
         Injects the feedback into Strategy and Content agent prompts
-        so the LLM can generate improved variants.
+        so the system can generate improved variants.
         """
         try:
             campaign = self.db.query(Campaign).filter(Campaign.id == campaign_id).first()

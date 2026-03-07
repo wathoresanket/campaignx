@@ -17,7 +17,7 @@ class OptimizationAgent(BaseAgent):
         Analyzes current run metrics using MAB principles.
         Returns optimization decisions for the next loop.
         """
-        # Strip any large nested data from metrics before sending to LLM
+        # Strip any large nested data from metrics before analysis
         slim_metrics = []
         for m in curr_metrics:
             slim_metrics.append({

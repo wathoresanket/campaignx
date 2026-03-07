@@ -123,7 +123,7 @@ def get_campaign_insights(campaign_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{campaign_id}/segment-intelligence")
 async def get_segment_intelligence(campaign_id: int, db: Session = Depends(get_db)):
-    """Returns AI-generated intelligence for each segment in a campaign."""
+    """Returns computed intelligence for each segment in a campaign."""
     service = SegmentIntelligenceService(db)
     intelligence = await service.generate_intelligence(campaign_id)
     return {"intelligence": intelligence}

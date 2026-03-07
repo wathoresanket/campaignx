@@ -2,7 +2,7 @@
 Segment Intelligence Service
 ─────────────────────────────
 Analyzes segment demographics and engagement metrics to generate
-human-readable explanations for each customer segment using LLM analysis.
+human-readable explanations for each customer segment using contextual analysis.
 """
 
 import json
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class SegmentIntelligenceService(BaseAgent):
-    """Uses BaseAgent's LLM capabilities to generate segment intelligence."""
+    """Uses BaseAgent's capabilities to generate segment intelligence."""
 
     def __init__(self, db: Session):
         super().__init__()
@@ -83,7 +83,7 @@ class SegmentIntelligenceService(BaseAgent):
 
     @staticmethod
     def _fallback_intelligence(segment_data: list) -> List[Dict[str, str]]:
-        """Fallback intelligence when LLM is unavailable."""
+        """Fallback intelligence when the analysis engine is unavailable."""
         results = []
         for seg in segment_data:
             name = seg["name"].replace("_", " ").title()
