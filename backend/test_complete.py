@@ -9,10 +9,10 @@ from agents.campaign_brief_agent import CampaignBriefAgent
 from config import settings
 
 async def main():
-    print(f"Current GEMINI_API_KEY: {settings.GEMINI_API_KEY[:5]}...{settings.GEMINI_API_KEY[-5:]}" if settings.GEMINI_API_KEY else "No Key")
+    print(f"Current GROQ_API_KEY: {settings.GROQ_API_KEY[:5]}...{settings.GROQ_API_KEY[-5:]}" if settings.GROQ_API_KEY else "No Key")
     
     print("Testing CampaignBriefAgent...")
-    brief_agent = CampaignBriefAgent(model="gemini-2.0-flash")
+    brief_agent = CampaignBriefAgent(model="llama-3.3-70b-versatile")
     
     brief_text = "Run an email campaign for a new shopping credit card targeting urban millennials. Optimize for click rate."
     

@@ -4,7 +4,7 @@ from agents.base_agent import BaseAgent
 
 async def test():
     agent = BaseAgent()
-    print("Sending request to Gemini...")
+    print("Sending request to Groq...")
     start = time.time()
     try:
         res = await agent._complete_json("Return {\"hello\": \"world\"}")

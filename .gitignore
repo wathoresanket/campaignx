@@ -46,3 +46,6 @@ frontend/frontend.log
 # Agent data
 .agent*
 .gemini/
+
+# docs
+docs/

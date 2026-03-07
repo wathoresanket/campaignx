@@ -15,14 +15,18 @@ class CampaignBriefAgent(BaseAgent):
     async def run(self, brief_text: str) -> Dict[str, Any]:
         """Parses a natural language brief into structured campaign JSON."""
         prompt = f"""
-        You are an expert marketing campaign analyzer. Parse the following natural language campaign brief into a structured JSON format.
+        You are an expert marketing campaign analyzer for SuperBFSI. Parse the following natural language campaign brief into a structured JSON format.
+        
+        Since this platform is specifically for launching a term deposit product, use the following defaults if not explicitly contradicted in the brief:
+        - "product": "Term Deposit Product"
+        - "optimization_goal": "click_rate"
         
         The JSON should have these precise keys:
         - "product": string, name of the product being promoted
         - "constraints": string, any specific rules or constraints mentioned
         - "target_segments": list of strings, the overall target audience mentioned
         - "tone": string, the tone of the communication
-        - "optimization_goal": string, what metrics to optimize for (e.g., "open rate and click rate")
+        - "optimization_goal": string, what metrics to optimize for (e.g., "click_rate")
         - "cta_url": string, the call to action URL if present, otherwise null
 
         Brief to parse:
