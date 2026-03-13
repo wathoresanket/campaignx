@@ -2,14 +2,14 @@
  * DashboardPage.jsx
  * ─────────────────
  * Campaign analytics dashboard showing optimization progress,
- * campaign lifecycle timeline, agent activity feed, and AI insights.
+ * campaign lifecycle timeline, system activity feed, and performance insights.
  */
 
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { backendClient } from '../api/backendClient';
 import MetricsChart from '../components/MetricsChart';
-import AgentLogsPanel from '../components/AgentLogsPanel';
+import SystemLogsPanel from '../components/SystemLogsPanel';
 import OptimizationTimelineChart from '../components/OptimizationTimelineChart';
 import CampaignTimeline from '../components/CampaignTimeline';
 import { Activity, IterationCcw, Download, Lightbulb, PieChart } from 'lucide-react';
@@ -70,13 +70,30 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-6">
+            {/* Final Round Competition Banner */}
+            <div className="bg-indigo-600 px-4 py-3 rounded-lg shadow-lg mb-6 flex items-center justify-between text-white">
+                <div className="flex items-center">
+                    <div className="p-2 bg-indigo-500 rounded-lg mr-3">
+                        <Activity className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <p className="font-bold text-lg">Final On-Campus Round Active</p>
+                        <p className="text-indigo-100 text-sm">Targeting 1,000 customers. Scoring focus: Maximizing EC & EO counts.</p>
+                    </div>
+                </div>
+                <div className="text-right hidden md:block">
+                    <p className="text-xs uppercase tracking-wider text-indigo-200 font-semibold">Competition Window</p>
+                    <p className="font-mono font-medium">10 Mar - 14 Mar 2026</p>
+                </div>
+            </div>
+
             <div className="bg-white px-4 py-5 border-b border-gray-200 sm:px-6 shadow rounded-lg mb-6 flex justify-between items-center">
                 <div>
                     <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center">
                         <Activity className="mr-2 h-5 w-5 text-blue-500" />
-                        Campaign Execution Dashboard
+                        Campaign Performance Command Center
                     </h3>
-                    <p className="mt-1 text-sm text-gray-500">View overall execution progression and status.</p>
+                    <p className="mt-1 text-sm text-gray-500">Autonomous optimization loop for SuperBFSI Final Cohort.</p>
                 </div>
                 <div className="flex space-x-4">
                     <div className="flex bg-blue-50 p-2 rounded items-center">
@@ -93,28 +110,28 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Two-column layout: Campaign Timeline + Agent Activity */}
+            {/* Two-column layout: Campaign Timeline + System Activity */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Campaign Lifecycle Timeline */}
                 <div className="lg:col-span-1">
                     <CampaignTimeline logs={logs} campaignStatus={campaign?.status || 'draft'} />
                 </div>
-                {/* Live Agent Activity Feed */}
+                {/* System Execution Feed */}
                 <div className="lg:col-span-2">
-                    <AgentLogsPanel campaignId={id} />
+                    <SystemLogsPanel campaignId={id} />
                 </div>
             </div>
 
             {/* Optimization Timeline Chart */}
             <OptimizationTimelineChart timeline={timeline} />
 
-            {/* AI Marketing Insights */}
+            {/* Strategy Optimization Findings */}
             {insights.length > 0 && (
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-lg shadow p-6 mb-6">
                     <div className="flex justify-between items-center mb-4">
                         <h4 className="flex items-center text-xl font-bold text-blue-900">
                             <Lightbulb className="mr-2 h-6 w-6 text-yellow-500" />
-                            AI Marketing Insights
+                            Strategy Optimization Findings
                         </h4>
                         <button
                             onClick={exportInsights}

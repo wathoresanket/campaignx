@@ -5,7 +5,7 @@ import sys
 # Ensure backend is in path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from agents.campaign_brief_agent import CampaignBriefAgent
+from engines.brief_processor import BriefProcessor
 from config import settings
 
 async def main():

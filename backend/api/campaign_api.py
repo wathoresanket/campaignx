@@ -3,16 +3,16 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from database import get_db
-from models import Campaign, CampaignRun, AgentLog, PerformanceMetric
+from models import Campaign, CampaignRun, SystemLog, PerformanceMetric
 from schemas import (
     CampaignBriefRequest, 
     CampaignResponse, 
-    AgentLogResponse, 
+    SystemLogResponse, 
     CampaignRunResponse,
     CampaignInsightResponse
 )
 
-from orchestrator.agent_orchestrator import AgentOrchestrator
+from orchestrator.campaign_coordinator import CampaignCoordinator
 from services.campaign_service import CampaignService
 from services.insight_service import InsightService
 from services.segment_intelligence_service import SegmentIntelligenceService
@@ -22,22 +22,22 @@ router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 # ── Global Logs (all campaigns) ──
 
-@router.get("/logs", response_model=List[AgentLogResponse], tags=["logs"])
+@router.get("/logs", response_model=List[SystemLogResponse], tags=["logs"])
 def get_all_logs(db: Session = Depends(get_db)):
-    """Returns all agent logs across all campaigns (used by AgentLogsPage)."""
-    return db.query(AgentLog).order_by(AgentLog.timestamp.desc()).all()
+    """Returns all system execution logs across all campaigns."""
+    return db.query(SystemLog).order_by(SystemLog.timestamp.desc()).all()
 
 # ── Campaign Start ──
 
 @router.post("/start", response_model=CampaignResponse)
 async def start_campaign(request: CampaignBriefRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Receives brief, creates campaign, and kicks off async orchestration up to approval gate."""
+    """Receives brief, creates campaign, and kicks off async orchestration."""
     service = CampaignService(db)
     campaign = service.create_campaign(request)
     
     # Run orchestration in background
-    orchestrator = AgentOrchestrator(db)
-    background_tasks.add_task(orchestrator.generate_campaign_plan, campaign.id)
+    coordinator = CampaignCoordinator(db)
+    background_tasks.add_task(coordinator.generate_campaign_plan, campaign.id)
     
     return campaign
 
@@ -65,7 +65,7 @@ def get_campaign(campaign_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{campaign_id}/approve")
 async def approve_campaign(campaign_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Approves humanity-in-the-loop and continues to Execution -> MAB Optimization"""
+    """Approves the plan and continues to execution and optimization."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -73,8 +73,8 @@ async def approve_campaign(campaign_id: int, background_tasks: BackgroundTasks, 
     if campaign.status != "pending_approval":
         raise HTTPException(status_code=400, detail="Campaign not awaiting approval")
         
-    orchestrator = AgentOrchestrator(db)
-    background_tasks.add_task(orchestrator.execute_and_optimize, campaign.id, max_loops=3)
+    coordinator = CampaignCoordinator(db)
+    background_tasks.add_task(coordinator.execute_and_optimize, campaign.id, max_loops=3)
     
     service = CampaignService(db)
     return service.update_status(campaign_id, "approved")
@@ -83,7 +83,7 @@ async def approve_campaign(campaign_id: int, background_tasks: BackgroundTasks, 
 async def reject_campaign(campaign_id: int, feedback: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Rejects campaign plan with feedback text.
-    Triggers background regeneration with feedback injected into agent prompts.
+    Triggers background regeneration with feedback.
     """
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
@@ -91,9 +91,9 @@ async def reject_campaign(campaign_id: int, feedback: dict, background_tasks: Ba
 
     feedback_text = feedback.get("feedback", "No specific feedback provided")
 
-    # Trigger regeneration in background with human feedback
-    orchestrator = AgentOrchestrator(db)
-    background_tasks.add_task(orchestrator.regenerate_campaign_plan, campaign_id, feedback_text)
+    # Trigger regeneration in background with feedback
+    coordinator = CampaignCoordinator(db)
+    background_tasks.add_task(coordinator.regenerate_campaign_plan, campaign_id, feedback_text)
 
     service = CampaignService(db)
     return service.update_status(campaign_id, "generating")
@@ -105,12 +105,12 @@ def get_campaign_runs(campaign_id: int, db: Session = Depends(get_db)):
     runs = db.query(CampaignRun).filter(CampaignRun.campaign_id == campaign_id).all()
     return runs
 
-# ── Agent Logs ──
+# ── System Logs ──
 
-@router.get("/{campaign_id}/logs", response_model=List[AgentLogResponse])
-def get_agent_logs(campaign_id: int, db: Session = Depends(get_db)):
-    query = db.query(AgentLog).filter(AgentLog.campaign_id == campaign_id)
-    return query.order_by(AgentLog.timestamp.asc()).all()
+@router.get("/{campaign_id}/logs", response_model=List[SystemLogResponse])
+def get_system_logs(campaign_id: int, db: Session = Depends(get_db)):
+    query = db.query(SystemLog).filter(SystemLog.campaign_id == campaign_id)
+    return query.order_by(SystemLog.timestamp.asc()).all()
 
 # ── Campaign Insights ──
 

@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 SPEC_PATH = os.path.join(os.path.dirname(__file__), "..", "tools", "openapi.json")
 
 
-class AnalyticsAgent:
+class AnalyticsEngine:
     """
     Fetches real reports via dynamically discovered API tools and computes metrics.
     Loads the OpenAPI spec at init → discovers get_report endpoint →
@@ -42,7 +42,7 @@ class AnalyticsAgent:
             route = routes[op_id]
             self.registry.register_tool(op_id, route["path"], route["method"])
 
-        logger.info(f"AnalyticsAgent discovered {len(tools)} API tools: {self.registry.get_registered_tools()}")
+        logger.info(f"AnalyticsEngine discovered {len(tools)} API tools: {self.registry.get_registered_tools()}")
 
     async def run(
         self,
@@ -64,6 +64,7 @@ class AnalyticsAgent:
             if not api_campaign_id:
                 logger.warning(f"No api_campaign_id for {segment_name}/{variant_label}, skipping report")
                 return {
+                    "segment_id": campaign.get("segment_id"),
                     "segment_name": str(segment_name),
                     "variant_label": variant_label,
                     "open_rate": 0.0,
@@ -95,6 +96,7 @@ class AnalyticsAgent:
             )
 
             return {
+                "segment_id": campaign.get("segment_id"),
                 "segment_name": str(segment_name),
                 "variant_label": variant_label,
                 "open_rate": rates["open_rate"],

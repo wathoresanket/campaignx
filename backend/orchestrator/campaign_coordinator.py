@@ -1,7 +1,7 @@
 """
-AgentOrchestrator
-─────────────────
-Coordinates the multi-agent campaign pipeline:
+CampaignCoordinator
+───────────────────
+Coordinates the multi-engine campaign pipeline:
   Plan phase:  Brief → Segmentation → Strategy → Content → Approval Gate
   Run phase:   Execution → Analytics → Optimization (loop) → Insights
 
@@ -17,19 +17,19 @@ from sqlalchemy.orm import Session
 
 from models import Campaign, CampaignRun, Segment
 from schemas import CampaignBriefRequest
-from custom_logging.agent_logger import log_agent_action
+from custom_logging.agent_logger import log_system_action
 from config import settings
 from tools.openapi_loader import OpenAPILoader
 from tools.dynamic_tool_registry import DynamicToolRegistry
 
-from agents.campaign_brief_agent import CampaignBriefAgent
-from agents.segmentation_agent import SegmentationAgent
-from agents.strategy_agent import StrategyAgent
-from agents.content_agent import ContentAgent
-from agents.execution_agent import ExecutionAgent
-from agents.analytics_agent import AnalyticsAgent
-from agents.optimization_agent import OptimizationAgent
-from agents.insight_agent import InsightAgent
+from engines.brief_processor import BriefProcessor
+from engines.segment_engine import SegmentEngine
+from engines.strategy_engine import StrategyEngine
+from engines.content_engine import ContentEngine
+from engines.execution_engine import ExecutionEngine
+from engines.analytics_engine import AnalyticsEngine
+from engines.optimization_engine import OptimizationEngine
+from engines.insight_engine import InsightEngine
 
 from services.campaign_service import CampaignService
 from services.analytics_service import AnalyticsService
@@ -42,16 +42,16 @@ logger = logging.getLogger(__name__)
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
-def _log(db, agent_name, campaign_id, input_data, output_data,
-         reasoning, status, action, api_calls=None):
-    """Thin wrapper around log_agent_action to reduce call-site verbosity."""
-    log_agent_action(
-        db, agent_name, campaign_id, input_data, output_data,
-        reasoning, api_calls_executed=api_calls, status=status, action_description=action,
+def _log(db, module_name, campaign_id, input_data, output_data,
+         logic, status, action, external_calls=None):
+    """Thin wrapper around log_system_action to reduce call-site verbosity."""
+    log_system_action(
+        db, module_name, campaign_id, input_data, output_data,
+        logic, external_calls=external_calls, status=status, action_description=action,
     )
 
 
-class AgentOrchestrator:
+class CampaignCoordinator:
     """Runs the full campaign pipeline with progressive logging."""
 
     def __init__(self, db: Session):
@@ -76,17 +76,17 @@ class AgentOrchestrator:
             op_id = tool["function"]["name"]
             route = routes[op_id]
             self.tool_registry.register_tool(op_id, route["path"], route["method"])
-        logger.info(f"Orchestrator discovered {len(tools)} API tools via OpenAPI spec")
+        logger.info(f"Coordinator discovered {len(tools)} API tools via OpenAPI spec")
 
-        # Agents
-        self.brief_agent = CampaignBriefAgent()
-        self.segmentation_agent = SegmentationAgent()
-        self.strategy_agent = StrategyAgent()
-        self.content_agent = ContentAgent()
-        self.execution_agent = ExecutionAgent()
-        self.analytics_agent = AnalyticsAgent()
-        self.optimization_agent = OptimizationAgent()
-        self.insight_agent = InsightAgent()
+        # Engines
+        self.brief_processor = BriefProcessor()
+        self.segment_engine = SegmentEngine()
+        self.strategy_engine = StrategyEngine()
+        self.content_engine = ContentEngine()
+        self.execution_engine = ExecutionEngine()
+        self.analytics_engine = AnalyticsEngine()
+        self.optimization_engine = OptimizationEngine()
+        self.insight_engine = InsightEngine()
 
     # ── Plan Phase (up to human approval gate) ─────────────────────
 
@@ -101,59 +101,59 @@ class AgentOrchestrator:
             historical_ctx = self.learning_svc.get_learning_context_string()
 
             # 1. Parse brief
-            parsed_brief = await self._run_agent(
-                campaign_id, "CampaignBriefAgent",
-                self.brief_agent.run, [brief_text],
+            parsed_brief = await self._execute_task(
+                campaign_id, "BriefProcessor",
+                self.brief_processor.run, [brief_text],
                 input_data={"brief": brief_text},
-                action_running="Parsing campaign brief",
-                action_done="Parsed campaign brief into structured data",
+                action_running="Processing campaign brief",
+                action_done="Processed campaign brief into structured data",
             )
             self.campaign_svc.save_parsed_brief(campaign_id, parsed_brief)
 
             # 2. Fetch REAL customer cohort via dynamically discovered API tool
-            _log(self.db, "DataFetcher", campaign_id, {}, {},
-                 "Fetching customer cohort via dynamic API discovery", "running",
-                 "Fetching real customer cohort data")
+            _log(self.db, "DataConnector", campaign_id, {}, {},
+                 "Connecting to customer data via dynamic discovery", "running",
+                 "Retrieving real customer cohort data")
 
             cohort_response = await self.tool_registry.execute(
                 "get_customer_cohort_api_v1_get_customer_cohort_get", {}
             )
             cohort_data = cohort_response.get("data", [])
 
-            _log(self.db, "DataFetcher", campaign_id, {},
+            _log(self.db, "DataConnector", campaign_id, {},
                  {"total_customers": len(cohort_data)},
-                 f"Fetched {len(cohort_data)} customers via dynamic API discovery", "completed",
+                 f"Retrieved {len(cohort_data)} customers via dynamic connection", "completed",
                  f"Retrieved {len(cohort_data)} customers from API",
-                 api_calls={"get_customer_cohort_api_v1_get_customer_cohort_get": {}})
+                 external_calls={"get_customer_cohort_api_v1_get_customer_cohort_get": {}})
 
             # 3. Segment customers using REAL cohort data
-            segments = await self._run_agent(
-                campaign_id, "SegmentationAgent",
-                self.segmentation_agent.run, [parsed_brief],
+            segments = await self._execute_task(
+                campaign_id, "SegmentEngine",
+                self.segment_engine.run, [parsed_brief],
                 kwargs={"cohort_data": cohort_data},
                 input_data={"parsed_brief": parsed_brief, "cohort_size": len(cohort_data)},
-                action_running="Creating micro-segments from real customer cohort",
+                action_running="Applying micro-segmentation logic",
                 action_done="Created customer micro-segments from real cohort data",
             )
             self.campaign_svc.save_segments(campaign_id, segments)
 
             # 4. Generate strategy (with historical learning)
-            strategies = await self._run_agent(
-                campaign_id, "StrategyAgent",
-                self.strategy_agent.run, [segments],
+            strategies = await self._execute_task(
+                campaign_id, "StrategyEngine",
+                self.strategy_engine.run, [segments],
                 kwargs={"historical_context": historical_ctx},
                 input_data=segments,
-                action_running="Selecting optimal send times and A/B test plans",
+                action_running="Determining optimal delivery strategy",
                 action_done="Generated segment strategies with historical learning",
             )
 
             # 5. Generate email content (with historical learning)
-            variants = await self._run_agent(
-                campaign_id, "ContentAgent",
-                self.content_agent.run, [parsed_brief, strategies],
+            variants = await self._execute_task(
+                campaign_id, "ContentEngine",
+                self.content_engine.run, [parsed_brief, strategies],
                 kwargs={"historical_context": historical_ctx},
                 input_data=strategies,
-                action_running="Generating A/B email variants",
+                action_running="Generating structured email variants",
                 action_done="Generated email variants for all segments",
             )
             self.campaign_svc.save_variants(campaign_id, variants)
@@ -166,7 +166,7 @@ class AgentOrchestrator:
         except Exception as e:
             logger.error(f"Error generating plan for campaign {campaign_id}: {e}")
             self.campaign_svc.update_status(campaign_id, "failed")
-            _log(self.db, "Orchestrator", campaign_id, {}, {"error": str(e)},
+            _log(self.db, "Coordinator", campaign_id, {}, {"error": str(e)},
                  f"Campaign planning failed: {e}", "error", "Campaign plan generation failed")
 
     # ── Run Phase (execution → optimization loop → insights) ───────
@@ -186,13 +186,13 @@ class AgentOrchestrator:
                 run = self.analytics_svc.create_run(campaign_id, loop)
 
                 # 5. Execute campaign via REAL send_campaign API
-                exec_result = await self._run_agent(
-                    campaign_id, "ExecutionAgent",
-                    self.execution_agent.run, [execution_plan],
+                exec_result = await self._execute_task(
+                    campaign_id, "ExecutionEngine",
+                    self.execution_engine.run, [execution_plan],
                     kwargs={"segments_with_ids": segments_info},
                     input_data=execution_plan,
-                    action_running=f"Dispatching campaign emails via API (loop {loop})",
-                    action_done=f"Campaign dispatched via real API (loop {loop})",
+                    action_running=f"Executing campaign delivery via API (loop {loop})",
+                    action_done=f"Campaign delivered via real API (loop {loop})",
                 )
 
                 # Store each api_campaign_id on the run for later report lookup
@@ -206,22 +206,22 @@ class AgentOrchestrator:
                     self.db.commit()
 
                 # 6. Collect REAL metrics via get_report API
-                metrics = await self._run_agent(
-                    campaign_id, "AnalyticsAgent",
-                    self.analytics_agent.run, [sent_campaigns],
+                metrics = await self._execute_task(
+                    campaign_id, "AnalyticsEngine",
+                    self.analytics_engine.run, [sent_campaigns],
                     kwargs={"previous_metrics": previous_metrics},
-                    action_running=f"Fetching real engagement reports from API (loop {loop})",
-                    action_done=f"Computed open/click rates from real reports (loop {loop})",
+                    action_running=f"Capturing engagement telemetry from API (loop {loop})",
+                    action_done=f"Computed performance metrics from real reports (loop {loop})",
                 )
                 self.analytics_svc.save_metrics(run.id, metrics)
 
                 # 7. Optimize
-                opt_decision = await self._run_agent(
-                    campaign_id, "OptimizationAgent",
-                    self.optimization_agent.run, [metrics],
+                opt_decision = await self._execute_task(
+                    campaign_id, "OptimizationEngine",
+                    self.optimization_engine.run, [metrics],
                     input_data=metrics,
-                    action_running=f"Running MAB optimization (loop {loop})",
-                    action_done=f"Updated strategy via MAB results (loop {loop})",
+                    action_running=f"Running performance optimization (loop {loop})",
+                    action_done=f"Updated strategy via performance results (loop {loop})",
                 )
                 self.optimization_svc.save_optimization_decisions(run.id, opt_decision)
 
@@ -236,11 +236,11 @@ class AgentOrchestrator:
 
             # 8. Generate insights from all run data
             all_metrics = self._compile_all_metrics(campaign_id)
-            insights = await self._run_agent(
-                campaign_id, "InsightAgent",
-                self.insight_agent.run, [all_metrics],
+            insights = await self._execute_task(
+                campaign_id, "InsightEngine",
+                self.insight_engine.run, [all_metrics],
                 input_data={"raw_metrics": all_metrics},
-                action_running="Generating campaign insights from real metrics",
+                action_running="Distilling campaign insights from performance metrics",
                 action_done="Generated actionable marketing insights",
             )
             self.insight_svc.save_insights_batch(campaign_id, insights)
@@ -250,29 +250,29 @@ class AgentOrchestrator:
         except Exception as e:
             logger.error(f"Error executing/optimizing campaign {campaign_id}: {e}")
             self.campaign_svc.update_status(campaign_id, "failed")
-            _log(self.db, "Orchestrator", campaign_id, {}, {"error": str(e)},
+            _log(self.db, "Coordinator", campaign_id, {}, {"error": str(e)},
                  f"Campaign execution sequence failed: {e}", "error", "Campaign execution failed")
 
     # ── Internal Helpers ───────────────────────────────────────────
 
-    async def _run_agent(self, campaign_id, agent_name, fn, args,
-                         kwargs=None, input_data=None,
-                         action_running="", action_done="", api_calls=None):
+    async def _execute_task(self, campaign_id, module_name, fn, args,
+                           kwargs=None, input_data=None,
+                           action_running="", action_done="", external_calls=None):
         """
-        Wraps every agent call with 'running' → execute → 'completed' logging.
+        Wraps every engine call with 'running' → execute → 'completed' logging.
         Reduces the 4-line log+call+log+save pattern to a single call.
         """
-        _log(self.db, agent_name, campaign_id, {}, {},
-             f"Starting {agent_name}", "running", action_running)
+        _log(self.db, module_name, campaign_id, {}, {},
+             f"Starting {module_name} operation", "running", action_running)
 
         result = await fn(*args, **(kwargs or {}))
 
-        # We can extract api_calls from the agent instance if it exposes them, otherwise default to None
-        calls_used = api_calls or getattr(fn.__self__, 'api_calls_executed', None)
+        # We can extract external_calls from the engine instance if it exposes them, otherwise default to None
+        calls_used = external_calls or getattr(fn.__self__, 'api_calls_executed', None)
 
-        _log(self.db, agent_name, campaign_id,
+        _log(self.db, module_name, campaign_id,
              input_data or {}, result,
-             f"Finished {agent_name}", "completed", action_done, api_calls=calls_used)
+             f"Finished {module_name} operation", "completed", action_done, external_calls=calls_used)
         return result
 
     @staticmethod
@@ -320,7 +320,7 @@ class AgentOrchestrator:
     async def regenerate_campaign_plan(self, campaign_id: int, feedback: str):
         """
         Re-runs the plan phase incorporating human rejection feedback.
-        Injects the feedback into Strategy and Content agent prompts
+        Injects the feedback into Strategy and Content engine prompts
         so the system can generate improved variants.
         """
         try:
@@ -330,64 +330,67 @@ class AgentOrchestrator:
 
             self.campaign_svc.update_status(campaign_id, "generating")
 
-            _log(self.db, "Orchestrator", campaign_id, {"feedback": feedback}, {},
+            _log(self.db, "Coordinator", campaign_id, {"feedback": feedback}, {},
                  f"Regenerating campaign plan with feedback: {feedback}", "running",
-                 "Re-generating campaign based on human feedback")
+                 "Clearing old plan and re-generating based on feedback")
+
+            # Clear old segments/variants to avoid duplicates
+            self.campaign_svc.delete_campaign_content(campaign_id)
 
             brief_text = campaign.brief
             historical_ctx = self.learning_svc.get_learning_context_string()
 
             # Add rejection feedback to historical context
             feedback_context = (
-                f"\n\nHUMAN FEEDBACK (previous plan was rejected):\n{feedback}\n"
+                f"\n\nFEEDBACK (previous plan was rejected):\n{feedback}\n"
                 f"Please address this feedback in the new plan."
             )
             enriched_ctx = historical_ctx + feedback_context
 
             # Re-parse brief (same as original)
-            parsed_brief = await self._run_agent(
-                campaign_id, "CampaignBriefAgent",
-                self.brief_agent.run, [brief_text],
+            parsed_brief = await self._execute_task(
+                campaign_id, "BriefProcessor",
+                self.brief_processor.run, [brief_text],
                 input_data={"brief": brief_text, "regeneration": True},
-                action_running="Re-parsing campaign brief",
-                action_done="Re-parsed campaign brief",
+                action_running="Re-processing campaign brief",
+                action_done="Re-processed campaign brief",
             )
             self.campaign_svc.save_parsed_brief(campaign_id, parsed_brief)
 
-            # Fetch cohort again via dynamic API discovery
+            # Fetch cohort again via dynamic connection
             cohort_response = await self.tool_registry.execute(
                 "get_customer_cohort_api_v1_get_customer_cohort_get", {}
             )
             cohort_data = cohort_response.get("data", [])
-            _log(self.db, "DataFetcher", campaign_id, {}, {"total_customers": len(cohort_data)},
-                 "Re-fetched customer cohort", "completed", "Re-fetched cohort",
-                 api_calls={"get_customer_cohort_api_v1_get_customer_cohort_get": {}})
+            _log(self.db, "DataConnector", campaign_id, {}, {"total_customers": len(cohort_data)},
+                 "Re-fetched customer data", "completed", "Re-fetched cohort",
+                 external_calls={"get_customer_cohort_api_v1_get_customer_cohort_get": {}})
 
             # Re-segment
-            segments = await self._run_agent(
-                campaign_id, "SegmentationAgent",
-                self.segmentation_agent.run, [parsed_brief],
+            segments = await self._execute_task(
+                campaign_id, "SegmentEngine",
+                self.segment_engine.run, [parsed_brief],
                 kwargs={"cohort_data": cohort_data},
                 input_data={"parsed_brief": parsed_brief, "cohort_size": len(cohort_data)},
-                action_running="Re-segmenting customers with feedback",
+                action_running="Re-applying micro-segmentation with feedback",
                 action_done="Re-created segments incorporating feedback",
             )
             self.campaign_svc.save_segments(campaign_id, segments)
 
             # Re-generate strategy (with feedback injected)
-            strategies = await self._run_agent(
-                campaign_id, "StrategyAgent",
-                self.strategy_agent.run, [segments],
+            strategies = await self._execute_task(
+                campaign_id, "StrategyEngine",
+                self.strategy_engine.run, [segments],
                 kwargs={"historical_context": enriched_ctx},
                 input_data=segments,
-                action_running="Regenerating strategy with human feedback",
+                action_running="Regenerating strategy with feedback",
                 action_done="Generated improved strategy based on feedback",
             )
 
             # Re-generate content (with feedback injected)
-            variants = await self._run_agent(
-                campaign_id, "ContentAgent",
-                self.content_agent.run, [parsed_brief, strategies],
+            variants = await self._execute_task(
+                campaign_id, "ContentEngine",
+                self.content_engine.run, [parsed_brief, strategies],
                 kwargs={"historical_context": enriched_ctx},
                 input_data=strategies,
                 action_running="Regenerating email variants based on feedback",
@@ -398,13 +401,13 @@ class AgentOrchestrator:
             # Update status back to pending_approval
             self.campaign_svc.update_status(campaign_id, "pending_approval")
 
-            _log(self.db, "Orchestrator", campaign_id,
+            _log(self.db, "Coordinator", campaign_id,
                  {"feedback": feedback}, {"variants_count": len(variants)},
                  "Campaign plan regenerated successfully", "completed",
                  "Regeneration complete — awaiting re-approval")
         except Exception as e:
             logger.error(f"Error regenerating plan for campaign {campaign_id}: {e}")
             self.campaign_svc.update_status(campaign_id, "failed")
-            _log(self.db, "Orchestrator", campaign_id, {}, {"error": str(e)},
+            _log(self.db, "Coordinator", campaign_id, {}, {"error": str(e)},
                  f"Campaign regeneration failed: {e}", "error", "Campaign plan regeneration failed")
 

@@ -13,12 +13,12 @@ import json
 import logging
 from typing import Dict, Any, List
 
-from agents.base_agent import BaseAgent
+from engines.base_engine import BaseEngine
 
 logger = logging.getLogger(__name__)
 
 
-class SegmentationAgent(BaseAgent):
+class SegmentEngine(BaseEngine):
     """Defines segment rules from the brief, then applies them to the full cohort."""
 
     async def run(
@@ -36,7 +36,7 @@ class SegmentationAgent(BaseAgent):
 
         # Step 1: Define segment RULES (not assign individual customers)
         prompt = f"""
-        You are an advanced customer segmentation expert. 
+        You are an advanced marketing analysis engine. 
         Based on the campaign brief and customer cohort summary below, define 4-6 highly specific micro-segment RULES.
 
         Instead of broad groups, build micro-segments combining factors like:
@@ -44,6 +44,16 @@ class SegmentationAgent(BaseAgent):
         - gender
         - investment profile
         - engagement history
+        
+        PRODUCT-SPECIFIC SEGMENTATION RULES:
+        - IF AND ONLY IF the product is "XDeposit":
+            1. You MUST create a specific micro-segment for "Female Senior Citizens" (Age >= 60, Gender == 'Female').
+            2. You MUST include "Inactive" customers in your segmentation.
+        
+        - FOR ALL OTHER PRODUCTS (e.g., Credit Cards, Loans):
+            1. DO NOT create "Female Senior Citizens" segments unless specifically requested in the brief.
+            2. Follow the brief's targets only (e.g., urban millennials, reward seekers).
+            3. Do NOT focus on the 0.25% bonus logic.
         
         Examples of good micro-segments: "young professionals", "senior citizens", "female senior citizens", "inactive high-net-worth customers".
         

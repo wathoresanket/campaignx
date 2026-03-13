@@ -19,7 +19,7 @@ class Campaign(Base):
     
     segments = relationship("Segment", back_populates="campaign", cascade="all, delete-orphan")
     runs = relationship("CampaignRun", back_populates="campaign", cascade="all, delete-orphan")
-    logs = relationship("AgentLog", back_populates="campaign", cascade="all, delete-orphan")
+    logs = relationship("SystemLog", back_populates="campaign", cascade="all, delete-orphan")
 
 class Segment(Base):
     __tablename__ = "segments"
@@ -72,16 +72,16 @@ class PerformanceMetric(Base):
     segment = relationship("Segment")
     variant = relationship("EmailVariant")
 
-class AgentLog(Base):
-    __tablename__ = "agent_logs"
+class SystemLog(Base):
+    __tablename__ = "system_logs"
     
     id = Column(Integer, primary_key=True, index=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True)
-    agent_name = Column(String, index=True)
+    module_name = Column(String, index=True)
     input_data = Column(Text, nullable=True) # JSON string
     output_data = Column(Text, nullable=True) # JSON string
-    reasoning_summary = Column(Text, nullable=True)
-    api_calls_executed = Column(Text, nullable=True, default="{}") # JSON strictly
+    logic_summary = Column(Text, nullable=True)
+    external_calls = Column(Text, nullable=True, default="{}") # JSON strictly
     status = Column(String, default="completed")  # 'running', 'completed', 'error'
     action_description = Column(String, nullable=True)  # Short human-readable action text
     timestamp = Column(DateTime, default=datetime.utcnow)

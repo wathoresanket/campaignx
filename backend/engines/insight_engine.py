@@ -1,16 +1,16 @@
 """
-InsightAgent — Generates natural-language marketing insights from campaign metrics.
+InsightEngine — Generates natural-language marketing insights from campaign metrics.
 """
 
 import json
 import logging
 from typing import Dict, Any, List
-from agents.base_agent import BaseAgent
+from engines.base_engine import BaseEngine
 
 logger = logging.getLogger(__name__)
 
 
-class InsightAgent(BaseAgent):
+class InsightEngine(BaseEngine):
 
     async def run(self, metrics: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         """
@@ -18,7 +18,7 @@ class InsightAgent(BaseAgent):
         into human-readable marketing insights per segment.
         """
         prompt = f"""
-        You are an expert marketing data analyst. Review the automated campaign metrics below and generate powerful, highly structured insights per segment.
+        You are a marketing data analytics engine. Review the automated campaign metrics below and generate powerful, highly structured insights per segment.
         A good insight points out exactly what performed best (send time, tone, subject pattern) and calculates wins (e.g. 'Best Email Variant: B', 'Top Click Rate: 14%').
         
         Metrics:

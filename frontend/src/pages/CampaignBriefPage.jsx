@@ -82,8 +82,8 @@ export default function CampaignBriefPage() {
         <div className="space-y-6">
             {/* Campaign Brief Input */}
             <div className="bg-white px-4 py-5 border-b border-gray-200 sm:px-6 shadow rounded-lg">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">Start New AI Campaign</h3>
-                <p className="mt-1 text-sm text-gray-500">Provide a natural language brief. CampaignX agents will handle the rest.</p>
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Initialize New Marketing Campaign</h3>
+                <p className="mt-1 text-sm text-gray-500">Provide a natural language brief. CampaignX modules will handle the rest.</p>
 
                 <form onSubmit={handleSubmit} className="mt-5 sm:flex sm:items-start flex-col space-y-4">
                     <div className="w-full relative">
@@ -111,7 +111,7 @@ export default function CampaignBriefPage() {
                         disabled={isSubmitting}
                         className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
                     >
-                        {isSubmitting ? 'Agents are planning...' : 'Generate Campaign Plan'}
+                        {isSubmitting ? 'System is planning...' : 'Generate Campaign Plan'}
                         {!isSubmitting && <Play className="ml-2 -mr-1 h-4 w-4" aria-hidden="true" />}
                     </button>
                 </form>

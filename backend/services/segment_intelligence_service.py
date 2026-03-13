@@ -8,15 +8,15 @@ human-readable explanations for each customer segment using contextual analysis.
 import json
 import logging
 from typing import Dict, List
-from agents.base_agent import BaseAgent
+from engines.base_engine import BaseEngine
 from sqlalchemy.orm import Session
 from models import Campaign, Segment, PerformanceMetric
 
 logger = logging.getLogger(__name__)
 
 
-class SegmentIntelligenceService(BaseAgent):
-    """Uses BaseAgent's capabilities to generate segment intelligence."""
+class SegmentIntelligenceService(BaseEngine):
+    """Uses BaseEngine's capabilities to generate segment intelligence."""
 
     def __init__(self, db: Session):
         super().__init__()

@@ -8,15 +8,15 @@ Surfaces accumulated knowledge so the platform demonstrably learns over time.
 import json
 import logging
 from typing import List, Dict
-from agents.base_agent import BaseAgent
+from engines.base_engine import BaseEngine
 from sqlalchemy.orm import Session
 from models import CampaignInsight
 
 logger = logging.getLogger(__name__)
 
 
-class HistoricalLearningService(BaseAgent):
-    """Uses BaseAgent's capabilities combined with DB access for historical analysis."""
+class HistoricalLearningService(BaseEngine):
+    """Uses BaseEngine's capabilities combined with DB access for historical analysis."""
 
     def __init__(self, db: Session):
         super().__init__()

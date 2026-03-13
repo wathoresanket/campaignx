@@ -4,7 +4,8 @@ import CampaignBriefPage from './pages/CampaignBriefPage';
 import ApprovalPage from './pages/ApprovalPage';
 import DashboardPage from './pages/DashboardPage';
 import CampaignAnalyticsDashboard from './pages/CampaignAnalyticsDashboard';
-import AgentLogsPage from './pages/AgentLogsPage';
+import SystemLogsPage from './pages/SystemLogsPage';
+import CampaignsListPage from './pages/CampaignsListPage';
 
 function App() {
   return (
@@ -36,7 +37,8 @@ function App() {
               </div>
               <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
                 <Link to="/" className="border-transparent text-gray-500 hover:border-blue-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">New Campaign</Link>
-                <Link to="/logs" className="border-transparent text-gray-500 hover:border-blue-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Agent Logs</Link>
+                <Link to="/history" className="border-transparent text-gray-500 hover:border-blue-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Campaign History</Link>
+                <Link to="/logs" className="border-transparent text-gray-500 hover:border-blue-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">System Logs</Link>
               </div>
             </div>
           </div>
@@ -49,7 +51,8 @@ function App() {
           <Route path="/campaign/:id/approval" element={<ApprovalPage />} />
           <Route path="/campaign/:id/dashboard" element={<DashboardPage />} />
           <Route path="/campaign/:id/analytics" element={<CampaignAnalyticsDashboard />} />
-          <Route path="/logs" element={<AgentLogsPage />} />
+          <Route path="/history" element={<CampaignsListPage />} />
+          <Route path="/logs" element={<SystemLogsPage />} />
         </Routes>
       </main>
     </div>

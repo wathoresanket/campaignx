@@ -1,16 +1,16 @@
 """
-OptimizationAgent — Multi-Armed Bandit optimizer for campaign performance.
+OptimizationEngine — Multi-Armed Bandit optimizer for campaign performance.
 """
 
 import json
 import logging
 from typing import Dict, Any, List
-from agents.base_agent import BaseAgent
+from engines.base_engine import BaseEngine
 
 logger = logging.getLogger(__name__)
 
 
-class OptimizationAgent(BaseAgent):
+class OptimizationEngine(BaseEngine):
 
     async def run(self, curr_metrics: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -26,12 +26,12 @@ class OptimizationAgent(BaseAgent):
             })
 
         prompt = f"""
-        You are an AI Optimization Agent for email marketing using Multi-Armed Bandit (MAB) principles.
+        You are a performance optimization engine for email marketing using Multi-Armed Bandit (MAB) principles.
         Analyze these metrics and decide the next action per segment: exploit the winning variant (~70%) or explore (~30%).
         
         CRITICAL RULE:
-        CRITICAL RULE:
-        Evaluate variant performance using a weighted score: Score = (0.7 * click_rate) + (0.3 * open_rate).
+        Evaluate variant performance using the primary scoring criterion: total count of 'Email Clicked' (EC=Y) and 'Email Opened' (EO=Y).
+        Formula for performance score: Score = (0.7 * click_rate) + (0.3 * open_rate).
 
         Current Run Metrics:
         {json.dumps(slim_metrics, indent=2)}

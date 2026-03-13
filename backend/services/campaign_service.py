@@ -31,7 +31,7 @@ class CampaignService:
                 campaign_id=campaign_id,
                 name=seg.get("name"),
                 customer_count=seg.get("customer_count"),
-                customer_ids=str(seg.get("customers", []))
+                customer_ids=json.dumps(seg.get("customer_ids", []))
             )
             self.db.add(segment)
         self.db.commit()
@@ -60,3 +60,11 @@ class CampaignService:
             self.db.commit()
             return campaign
         return None
+
+    def delete_campaign_content(self, campaign_id: int):
+        """Clears existing segments and variants for a campaign (used before regeneration)."""
+        # Cascade should handle variants if configured, but let's be explicit if needed.
+        segments = self.db.query(Segment).filter(Segment.campaign_id == campaign_id).all()
+        for seg in segments:
+            self.db.delete(seg)
+        self.db.commit()

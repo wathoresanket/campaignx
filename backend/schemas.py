@@ -67,15 +67,15 @@ class CampaignRunResponse(ORMBase):
     executed_time: Optional[datetime]
     metrics: List[PerformanceMetricResponse] = []
 
-# Agent Log
-class AgentLogResponse(ORMBase):
+# System Log
+class SystemLogResponse(ORMBase):
     id: int
     campaign_id: Optional[int]
-    agent_name: str
+    module_name: str
     input_data: Optional[str]
     output_data: Optional[str]
-    reasoning_summary: Optional[str]
-    api_calls_executed: Optional[str] = "{}"
+    logic_summary: Optional[str]
+    external_calls: Optional[str] = "{}"
     status: Optional[str] = "completed"
     action_description: Optional[str] = None
     timestamp: Optional[datetime] = None

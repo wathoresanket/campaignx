@@ -1,9 +1,9 @@
 import asyncio
 import time
-from agents.base_agent import BaseAgent
+from engines.base_engine import BaseEngine
 
 async def test():
-    agent = BaseAgent()
+    agent = BaseEngine()
     print("Sending request to Groq...")
     start = time.time()
     try:

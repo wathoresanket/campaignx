@@ -1,9 +1,9 @@
 import asyncio
-from agents.base_agent import BaseAgent
+from engines.base_engine import BaseEngine
 
 async def test():
     print("Initializing agent...")
-    agent = BaseAgent()
+    agent = BaseEngine()
     print("Calling API...")
     try:
         res = await asyncio.wait_for(agent._complete_json("Return {\"status\": \"ok\"}"), timeout=10.0)

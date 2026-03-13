@@ -1,8 +1,8 @@
 """
-Base Agent
-──────────
-Shared foundation for all CampaignX AI agents.
-Uses Groq API for ultra-fast completions.
+Base Engine
+───────────
+Shared foundation for all CampaignX processing engines.
+Uses Groq connectivity for ultra-fast logical processing.
 """
 
 import json
@@ -24,9 +24,9 @@ if settings.GROQ_API_KEY:
     groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
 
-class BaseAgent:
+class BaseEngine:
     """
-    Base class for all intelligent agents.
+    Base class for all processing engines.
     Uses Groq API.
     Subclasses inherit the client and call `_complete_json()`.
     """

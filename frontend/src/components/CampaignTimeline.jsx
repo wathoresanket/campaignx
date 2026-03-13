@@ -2,37 +2,37 @@
  * CampaignTimeline.jsx
  * ────────────────────
  * Visual vertical timeline showing the full lifecycle of a campaign.
- * Uses agent logs to determine which stages are completed, running, or pending.
+ * Uses system logs to determine which stages are completed, running, or pending.
  */
 
 import React, { useMemo } from 'react';
 import { Clock } from 'lucide-react';
 
-// All 9 stages in the campaign lifecycle, mapped to their agent names
+// All 9 stages in the campaign lifecycle, mapped to their module names
 const LIFECYCLE_STAGES = [
-    { key: 'brief', label: 'Campaign Created', agent: 'CampaignBriefAgent' },
-    { key: 'strategy', label: 'Strategy Generated', agent: 'StrategyAgent' },
-    { key: 'segments', label: 'Segments Created', agent: 'SegmentationAgent' },
-    { key: 'content', label: 'Email Variants Generated', agent: 'ContentAgent' },
-    { key: 'approval', label: 'Human Approval', agent: null }, // Determined by campaign status
-    { key: 'execution', label: 'Campaign Executed', agent: 'ExecutionAgent' },
-    { key: 'analytics', label: 'Metrics Collected', agent: 'AnalyticsAgent' },
-    { key: 'optimization', label: 'Optimization Completed', agent: 'OptimizationAgent' },
-    { key: 'insights', label: 'Insights Generated', agent: 'InsightAgent' },
+    { key: 'brief', label: 'Campaign Created', module: 'BriefProcessor' },
+    { key: 'strategy', label: 'Strategy Generated', module: 'StrategyEngine' },
+    { key: 'segments', label: 'Segments Created', module: 'SegmentEngine' },
+    { key: 'content', label: 'Email Variants Generated', module: 'ContentEngine' },
+    { key: 'approval', label: 'Human Approval', module: null }, // Determined by campaign status
+    { key: 'execution', label: 'Campaign Executed', module: 'ExecutionEngine' },
+    { key: 'analytics', label: 'Metrics Collected', module: 'AnalyticsEngine' },
+    { key: 'optimization', label: 'Optimization Completed', module: 'OptimizationEngine' },
+    { key: 'insights', label: 'Insights Generated', module: 'InsightEngine' },
 ];
 
 export default function CampaignTimeline({ logs = [], campaignStatus = 'draft' }) {
-    // Determine which stages are done based on agent log presence
+    // Determine which stages are done based on module log presence
     const stageStatuses = useMemo(() => {
-        // Build a set of agents that have "completed" logs
-        const completedAgents = new Set();
-        const runningAgents = new Set();
+        // Build a set of modules that have "completed" logs
+        const completedModules = new Set();
+        const runningModules = new Set();
 
         for (const log of logs) {
             if (log.status === 'completed') {
-                completedAgents.add(log.agent_name);
+                completedModules.add(log.module_name);
             } else if (log.status === 'running') {
-                runningAgents.add(log.agent_name);
+                runningModules.add(log.module_name);
             }
         }
 
@@ -47,11 +47,11 @@ export default function CampaignTimeline({ logs = [], campaignStatus = 'draft' }
                 return { ...stage, status: 'pending' };
             }
 
-            // Check agent logs for other stages
-            if (stage.agent && completedAgents.has(stage.agent)) {
+            // Check module logs for other stages
+            if (stage.module && completedModules.has(stage.module)) {
                 return { ...stage, status: 'completed' };
             }
-            if (stage.agent && runningAgents.has(stage.agent)) {
+            if (stage.module && runningModules.has(stage.module)) {
                 return { ...stage, status: 'running' };
             }
             return { ...stage, status: 'pending' };
@@ -96,7 +96,7 @@ export default function CampaignTimeline({ logs = [], campaignStatus = 'draft' }
                             {/* Stage label */}
                             <div className="pt-1">
                                 <span className={`text-sm font-medium ${stage.status === 'completed' ? 'text-gray-900' :
-                                        stage.status === 'running' ? 'text-yellow-700' : 'text-gray-400'
+                                    stage.status === 'running' ? 'text-yellow-700' : 'text-gray-400'
                                     }`}>
                                     {stage.label}
                                 </span>

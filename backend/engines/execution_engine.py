@@ -1,5 +1,5 @@
 """
-ExecutionAgent
+ExecutionEngine
 ───────────────
 Dispatches campaigns via dynamically discovered API tools from the OpenAPI spec.
 Uses OpenAPILoader to discover the send_campaign endpoint at runtime,
@@ -13,7 +13,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
-from agents.base_agent import BaseAgent
+from engines.base_engine import BaseEngine
 from config import settings
 from tools.openapi_loader import OpenAPILoader
 from tools.dynamic_tool_registry import DynamicToolRegistry
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 SPEC_PATH = os.path.join(os.path.dirname(__file__), "..", "tools", "openapi.json")
 
 
-class ExecutionAgent(BaseAgent):
+class ExecutionEngine(BaseEngine):
     """
     Sends campaigns via dynamically discovered API tools.
     Loads the OpenAPI spec at init → discovers send_campaign endpoint →
@@ -45,7 +45,7 @@ class ExecutionAgent(BaseAgent):
             route = routes[op_id]
             self.registry.register_tool(op_id, route["path"], route["method"])
 
-        logger.info(f"ExecutionAgent discovered {len(tools)} API tools: {self.registry.get_registered_tools()}")
+        logger.info(f"ExecutionEngine discovered {len(tools)} API tools: {self.registry.get_registered_tools()}")
 
     async def run(
         self,
@@ -68,12 +68,13 @@ class ExecutionAgent(BaseAgent):
             for seg in segments_with_ids:
                 seg_id = str(seg.get("id", seg.get("segment_id", "")))
                 customer_ids = seg.get("customer_ids", [])
+                name = seg.get("name", "unknown")
                 if isinstance(customer_ids, str):
                     try:
                         customer_ids = json.loads(customer_ids)
                     except (json.JSONDecodeError, TypeError):
                         customer_ids = []
-                segments_map[seg_id] = customer_ids
+                segments_map[seg_id] = {"customers": customer_ids, "name": name}
 
         async def _dispatch_variant(variant: Dict[str, Any], seg_id: str, customer_ids: List[str]):
             subject = variant.get("subject", "Campaign Email")
@@ -105,6 +106,7 @@ class ExecutionAgent(BaseAgent):
 
             return {
                 "segment_id": seg_id,
+                "segment_name": variant.get("segment_name", "unknown"),
                 "variant_label": variant.get("label", ""),
                 "api_campaign_id": api_campaign_id,
                 "send_time": send_time,
@@ -114,13 +116,18 @@ class ExecutionAgent(BaseAgent):
 
         tasks = []
         for seg_id, variants in execution_plan.items():
-            customer_ids = segments_map.get(seg_id, [])
+            seg_data = segments_map.get(seg_id, {})
+            customer_ids = seg_data.get("customers", [])
+            seg_name = seg_data.get("name", "unknown")
+            
             if not customer_ids:
                 logger.warning(f"No customer_ids for segment {seg_id}, skipping")
                 continue
 
             for variant in variants:
-                tasks.append(_dispatch_variant(variant, seg_id, customer_ids))
+                v_copy = variant.copy()
+                v_copy["segment_name"] = seg_name
+                tasks.append(_dispatch_variant(v_copy, seg_id, customer_ids))
 
         if tasks:
             sent_campaigns = await asyncio.gather(*tasks)
