@@ -1,12 +1,9 @@
 """
 SegmentationAgent
 ──────────────────
-Segments customers into micro-groups based on the parsed brief and
-real customer cohort data from the CampaignX API.
-
-Uses a two-step approach:
-1. Defines segment rules from the campaign brief (fast — small prompt)
-2. Python applies rules to full cohort (instant — pure computation)
+Creates micro-segment RULES from the campaign brief.
+Python then applies those rules to the entire cohort.
+No hardcoded demographic logic.
 """
 
 import json
@@ -19,183 +16,169 @@ logger = logging.getLogger(__name__)
 
 
 class SegmentEngine(BaseEngine):
-    """Defines segment rules from the brief, then applies them to the full cohort."""
 
     async def run(
         self,
         parsed_brief: Dict[str, Any],
         cohort_data: List[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Two-step segmentation:
-        1. Define segment rules based on cohort summary (fast)
-        2. Apply rules programmatically to assign all customers (instant)
-        """
+
         customers = cohort_data or []
         cohort_summary = self._summarize_cohort(customers)
 
-        # Step 1: Define segment RULES (not assign individual customers)
         prompt = f"""
-        You are an advanced marketing analysis engine. 
-        Based on the campaign brief and customer cohort summary below, define 4-6 highly specific micro-segment RULES.
+You are an advanced CRM segmentation engine.
 
-        Instead of broad groups, build micro-segments combining factors like:
-        - age group
-        - gender
-        - investment profile
-        - engagement history
-        
-        PRODUCT-SPECIFIC SEGMENTATION RULES:
-        - IF AND ONLY IF the product is "XDeposit":
-            1. You MUST create a specific micro-segment for "Female Senior Citizens" (Age >= 60, Gender == 'Female').
-            2. You MUST include "Inactive" customers in your segmentation.
-        
-        - FOR ALL OTHER PRODUCTS (e.g., Credit Cards, Loans):
-            1. DO NOT create "Female Senior Citizens" segments unless specifically requested in the brief.
-            2. Follow the brief's targets only (e.g., urban millennials, reward seekers).
-            3. Do NOT focus on the 0.25% bonus logic.
-        
-        Examples of good micro-segments: "young professionals", "senior citizens", "female senior citizens", "inactive high-net-worth customers".
-        
-        CRITICAL INSTRUCTION:
-        For each rule, you must provide a valid Python boolean expression string in the `condition` field.
-        The expression will be evaluated against a dictionary variable `c` representing one customer.
-        Use c.get('FieldName', default) syntax. Examples:
-        - Age filter: "c.get('Age', 0) >= 60"
-        - Gender filter: "c.get('Gender', '') == 'Male'"
-        - Combined: "c.get('Age', 0) >= 60 and c.get('Gender', '') == 'Female'"
-        - Income: "c.get('Monthly_Income', 0) > 200000"
-        For the catch_all segment, set condition to "True" and catch_all to true.
-        
-        Campaign Brief:
-        {json.dumps(parsed_brief, indent=2)}
+Your task is to DEFINE micro-segment RULES.
+Do NOT assign customers yourself — Python will apply the rules.
 
-        Customer Cohort Summary:
-        {cohort_summary}
-        """
-        try:
-            from schemas import SegmentationRulesSchema
-            result = await self._complete_pydantic(prompt, SegmentationRulesSchema)
-            segment_rules = [rule.model_dump() for rule in result.segments]
-            logger.info(f"Defined {len(segment_rules)} segment rules")
+Segments should combine attributes like:
+- demographics
+- engagement
+- financial behaviour
+- lifecycle stage
 
-            # Step 2: Apply rules to assign all customers (instant)
-            segments = self._apply_rules(segment_rules, customers)
-            logger.info(f"Created {len(segments)} segments from {len(customers)} customers")
-            return segments
-        except Exception as e:
-            logger.error(f"SegmentationAgent failed: {e}")
-            raise
+CRITICAL REQUIREMENTS:
 
-    def _apply_rules(
-        self,
-        rules: List[Dict[str, Any]],
-        customers: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        """Applies segment rules to assign all customers."""
+1. EXACT MATCH: You MUST explicitly create one segment for EACH audience listed in the `target_segments` array of the Campaign Brief. The segment `name` MUST exactly, word-for-word, match the string from `target_segments` (e.g., if the brief says "salaried professionals", your segment name MUST be "salaried professionals").
+
+2. RELEVANT SUB-SEGMENTS: In addition to the exact target audience, you MUST create AT LEAST 3 other highly relevant sub-segments that make logical sense for the campaign's product and tone. Do NOT generate random or irrelevant demographic segments. They must be logical extensions of the target market (e.g. if the product is an FD, target high-balance customers).
+
+3. CONDITIONAL BENEFITS: If the campaign brief specifies conditional benefits for certain groups (e.g., senior citizens, specific genders), you MUST ensure those segments are explicitly created so that the Content Engine can tailor emails to them.
+
+4. CATCH-ALL: Always include one final `catch_all: true` segment (e.g., "General Audience" or "All Customers") for anyone who doesn't match the prior rules.
+
+5. Provide a valid Python boolean expression in `condition` that works securely inside an `eval()` call. The customer dictionary is `c`. Make sure you use the EXACT field names from the Customer Cohort Summary!
+
+6. For `catch_all`, you MUST provide a strict JSON boolean (true or false, NO QUOTES). Total segments MUST be at least 4.
+
+Examples:
+c.get('Age',0) >= 60
+c.get('Gender','') == 'Female'
+c.get('Age',0) >= 60 and c.get('Gender','') == 'Female'
+c.get('City','') == 'Mumbai'
+
+Campaign Brief:
+{json.dumps(parsed_brief, indent=2)}
+
+Customer Cohort Summary:
+{cohort_summary}
+
+Return segments as a JSON object with a single key `segments` containing the array of rule objects.
+"""
+
+        from schemas import SegmentationRulesSchema
+
+        result = await self._complete_pydantic(prompt, SegmentationRulesSchema)
+
+        segment_rules = [rule.model_dump() for rule in result.segments]
+
+        logger.info(f"Defined {len(segment_rules)} segmentation rules")
+
+        segments = self._apply_rules(segment_rules, customers)
+
+        logger.info(
+            f"Created {len(segments)} segments from {len(customers)} customers"
+        )
+
+        return segments
+
+
+    def _apply_rules(self, rules, customers):
+
         assigned = set()
         segments = []
-        catch_all_rule = None
+        catch_all = None
 
-        # First pass: apply non-catch-all rules
         for rule in rules:
+
             if rule.get("catch_all"):
-                catch_all_rule = rule
+                catch_all = rule
                 continue
 
-            condition_str = rule.get("condition", "True")
-            name = rule.get("name", "Segment")
-            logger.info(f"Evaluating rule '{name}' with condition: {condition_str}")
+            condition = rule.get("condition","True")
+            name = rule.get("name","Segment")
 
-            matching_ids = []
-            eval_errors = 0
+            matches = []
+
             for c in customers:
-                cid = c.get("customer_id", "")
+
+                cid = c.get("customer_id")
+
                 if cid in assigned:
                     continue
+
                 try:
-                    if eval(condition_str, {"__builtins__": {}}, {"c": c}):
-                        matching_ids.append(cid)
+
+                    if eval(condition, {"__builtins__": {}}, {"c": c}):
+
+                        matches.append(cid)
                         assigned.add(cid)
-                except Exception:
-                    eval_errors += 1
 
-            if eval_errors > 0:
-                logger.warning(f"Rule '{name}': {eval_errors} eval errors out of {len(customers)} customers")
-            logger.info(f"Rule '{name}': matched {len(matching_ids)} customers")
+                except Exception as eval_err:
+                    logger.warning(f"Failed to evaluate condition '{condition}' for cid={cid}: {eval_err}")
+                    continue
 
-            if matching_ids:
+            if matches:
+
                 segments.append({
                     "name": name,
-                    "customer_count": len(matching_ids),
-                    "customer_ids": matching_ids,
+                    "customer_count": len(matches),
+                    "customer_ids": matches
                 })
 
-        # Second pass: catch-all for remaining customers
-        remaining_ids = [
-            c.get("customer_id", "") for c in customers
-            if c.get("customer_id", "") not in assigned
+        remaining = [
+            c["customer_id"]
+            for c in customers
+            if c["customer_id"] not in assigned
         ]
-        if remaining_ids:
-            catch_all_name = catch_all_rule.get("name", "General Audience") if catch_all_rule else "General Audience"
+
+        if remaining:
+
             segments.append({
-                "name": catch_all_name,
-                "customer_count": len(remaining_ids),
-                "customer_ids": remaining_ids,
+                "name": catch_all.get("name","General Audience") if catch_all else "General Audience",
+                "customer_count": len(remaining),
+                "customer_ids": remaining
             })
 
         return segments
 
+
     @staticmethod
-    def _summarize_cohort(cohort_data: List[Dict[str, Any]]) -> str:
-        """
-        Builds a compact statistical summary for the segmentation prompt.
-        Does NOT include individual customer IDs — just distributions.
-        """
+    def _summarize_cohort(cohort_data):
+
         if not cohort_data:
             return "No cohort data available."
 
         total = len(cohort_data)
 
-        # Collect all available fields from first record
-        sample_fields = list(cohort_data[0].keys()) if cohort_data else []
+        sample_fields = list(cohort_data[0].keys())
 
-        # Build distribution for categorical fields
-        distributions: Dict[str, Dict[str, int]] = {}
-        categorical_fields = ["Occupation", "Gender", "Marital_Status", "City",
-                              "KYC status", "App_Installed", "Existing Customer",
-                              "Social_Media_Active", "Occupation type"]
+        distributions = {}
 
-        for field in categorical_fields:
-            if field not in sample_fields:
-                continue
-            dist: Dict[str, int] = {}
+        for field in sample_fields:
+
+            dist = {}
+
             for c in cohort_data:
-                val = str(c.get(field, "Unknown"))
-                dist[val] = dist.get(val, 0) + 1
-            # Only include top 10 values
-            top = sorted(dist.items(), key=lambda x: -x[1])[:10]
-            distributions[field] = dict(top)
 
-        # Age stats if available
-        age_stats = ""
-        if "Age" in sample_fields:
-            ages = [c.get("Age", 0) for c in cohort_data if c.get("Age")]
-            if ages:
-                age_stats = f"\nAge: min={min(ages)}, max={max(ages)}, avg={sum(ages)/len(ages):.0f}"
+                val = str(c.get(field,"Unknown"))
 
-        dist_lines = []
-        for field, dist in distributions.items():
-            entries = [f"    {v}: {count} ({count*100/total:.1f}%)" for v, count in dist.items()]
-            dist_lines.append(f"  {field}:\n" + "\n".join(entries))
+                dist[val] = dist.get(val,0)+1
 
-        summary = f"""Total customers: {total}
-Available fields: {', '.join(sample_fields)}{age_stats}
+            if len(dist) <= 20:
+
+                distributions[field] = dist
+
+        return f"""
+Total customers: {total}
+
+Fields:
+{', '.join(sample_fields)}
 
 Distributions:
-{chr(10).join(dist_lines)}
+{json.dumps(distributions, indent=2)}
 
-Sample Records (first 3):
+Sample records:
 {json.dumps(cohort_data[:3], indent=2)}
 """
-        return summary

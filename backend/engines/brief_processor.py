@@ -30,6 +30,15 @@ class BriefProcessor(BaseEngine):
         - "tone": string, the tone of the communication
         - "optimization_goal": string, what metrics to optimize for (e.g., "click_rate", "open_rate")
         - "cta_url": string, the official call to action URL
+        - "key_benefits": list of strings, Summary of ALL factual benefits.
+        - "global_benefits": list of strings, Benefits that apply to EVERYONE (e.g. "1% interest"). IMPORTANT: Every benefit mentioned in the brief must be categorized here if it applies to all users.
+        - "conditional_benefits": list of strings, Demographic-specific bonuses (e.g. "+0.25% for seniors"). IMPORTANT: Clearly separate targeted rewards from general ones. Do NOT overlap with global_benefits.
+        - "special_conditions": string, other campaign rules.
+
+        PEDANTIC PARSING RULE: 
+        If a benefit is linked to a demographic (e.g. "seniors", "students", "female", "under 25"), it MUST go into `conditional_benefits`. 
+        If it's available to anyone opening the account, it MUST go into `global_benefits`.
+        Accuracy is critical to prevent false claims for ineligible segments.
 
         Brief to parse:
         "{brief_text}"

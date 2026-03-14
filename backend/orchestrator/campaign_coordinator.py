@@ -13,6 +13,7 @@ import os
 import json
 import logging
 import asyncio
+from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 
 from models import Campaign, CampaignRun, Segment
@@ -209,21 +210,26 @@ class CampaignCoordinator:
                 metrics = await self._execute_task(
                     campaign_id, "AnalyticsEngine",
                     self.analytics_engine.run, [sent_campaigns],
-                    kwargs={"previous_metrics": previous_metrics},
+                    kwargs={"previous_metrics": previous_metrics, "loop_index": loop, "target_segments": campaign.target_segments},
                     action_running=f"Capturing engagement telemetry from API (loop {loop})",
                     action_done=f"Computed performance metrics from real reports (loop {loop})",
                 )
                 self.analytics_svc.save_metrics(run.id, metrics)
 
-                # 7. Optimize
+                # 7. Optimize — pass segments_info for impact weighting and optimization_goal from brief
+                optimization_goal = campaign.optimization_goal or "click_rate"
                 opt_decision = await self._execute_task(
                     campaign_id, "OptimizationEngine",
                     self.optimization_engine.run, [metrics],
+                    kwargs={"segments_info": segments_info, "optimization_goal": optimization_goal},
                     input_data=metrics,
                     action_running=f"Running performance optimization (loop {loop})",
                     action_done=f"Updated strategy via performance results (loop {loop})",
                 )
                 self.optimization_svc.save_optimization_decisions(run.id, opt_decision)
+
+                # Mutate execution_plan for the NEXT loop
+                self._apply_optimization_decisions(execution_plan, opt_decision)
 
                 if opt_decision.get("stop_optimization") or loop == max_loops:
                     logger.info(f"Optimization complete for campaign {campaign_id} at loop {loop}.")
@@ -288,7 +294,13 @@ class CampaignCoordinator:
 
         for seg in campaign.segments:
             execution_plan[str(seg.id)] = [
-                {"label": v.variant_label, "subject": v.subject, "body": v.body}
+                {
+                    "label": v.variant_label,
+                    "subject": v.subject,
+                    "body": v.body,
+                    "segment_id": str(seg.id),   # stored so _apply_optimization_decisions can look up
+                    "segment_name": seg.name,    # stored for logging
+                }
                 for v in seg.variants
             ]
             segments_info.append({
@@ -300,6 +312,53 @@ class CampaignCoordinator:
             })
 
         return execution_plan, segments_info
+
+    def _apply_optimization_decisions(self, execution_plan: Dict[str, Any], opt_decision: Dict[str, Any]):
+        """
+        Mutates the execution_plan in-place based on the bandit's decisions.
+        Matches decisions to execution plan entries by segment_name (stored on each variant).
+        """
+        decisions = opt_decision.get("decisions", [])
+        for dec in decisions:
+            seg_name = dec.get("segment_name")
+            action = dec.get("action", "").lower()
+            best_variant_label = dec.get("best_variant")
+
+            # Lookup by segment_name stored on variant dicts (fix: was looking up non-existent key)
+            target_seg_id = None
+            for s_id, variants in execution_plan.items():
+                if variants and variants[0].get("segment_name") == seg_name:
+                    target_seg_id = s_id
+                    break
+
+            if target_seg_id is None:
+                logger.warning(f"_apply_optimization_decisions: No segment found for '{seg_name}', skipping")
+                continue
+                
+            valid_seg_id: str = str(target_seg_id)
+            current_variants = execution_plan[valid_seg_id]
+
+            if action == "exploit" and best_variant_label:
+                # Keep only the winning variant for the next loop
+                filtered = [v for v in current_variants if v.get("label") == best_variant_label]
+                if filtered:
+                    execution_plan[valid_seg_id] = filtered
+                    logger.info(f"Exploiting variant '{best_variant_label}' for segment '{seg_name}'")
+                else:
+                    logger.warning(f"Exploit: best_variant '{best_variant_label}' not found in plan for '{seg_name}'")
+
+            elif action == "explore":
+                # Mutate non-winning variants slightly to probe new space
+                explore_emojis = ["🎯", "💡", "✨", "🚀", "💰"]
+                explore_phrases = ["(Limited Time)", "Action Required", "Exclusive", "Update", "Don't Miss Out"]
+                import random as _random
+                for variant in current_variants:
+                    if variant.get("label") != best_variant_label:
+                        emoji = _random.choice(explore_emojis)
+                        phrase = _random.choice(explore_phrases)
+                        variant["subject"] = f"{variant['subject']} {phrase}"
+                        variant["body"] = f"{variant['body']}\n\n{emoji}"
+                logger.info(f"Exploring adjusted variants for segment '{seg_name}'")
 
     def _compile_all_metrics(self, campaign_id: int):
         """Gathers all performance metrics across optimization runs."""

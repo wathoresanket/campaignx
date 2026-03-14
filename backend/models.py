@@ -14,6 +14,10 @@ class Campaign(Base):
     tone = Column(String, nullable=True)
     optimization_goal = Column(String, nullable=True)
     cta_url = Column(String, nullable=True)
+    key_benefits = Column(Text, nullable=True) # JSON string array
+    global_benefits = Column(Text, nullable=True) # JSON string array
+    conditional_benefits = Column(Text, nullable=True) # JSON string array
+    special_conditions = Column(Text, nullable=True)
     status = Column(String, default="draft") # draft, pending_approval, approved, running, completed
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -29,6 +33,7 @@ class Segment(Base):
     name = Column(String, index=True)
     customer_ids = Column(Text, nullable=True) # JSON string array of IDs
     customer_count = Column(Integer, default=0)
+    description = Column(Text, nullable=True) # Segment profile for personalization
     
     campaign = relationship("Campaign", back_populates="segments")
     variants = relationship("EmailVariant", back_populates="segment", cascade="all, delete-orphan")

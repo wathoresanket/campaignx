@@ -9,6 +9,7 @@ then dispatches through the DynamicToolRegistry.
 import json
 import logging
 import os
+import random
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
@@ -88,15 +89,26 @@ class ExecutionEngine(BaseEngine):
             )
 
             # Execute via dynamic tool registry (discovered from OpenAPI spec)
-            result = await self.registry.execute(
-                "send_campaign_api_v1_send_campaign_post",
-                {
-                    "subject": subject,
-                    "body": body,
-                    "list_customer_ids": customer_ids,
-                    "send_time": send_time,
-                },
-            )
+            if settings.DEMO_MODE:
+                import uuid
+                # Simulation: Wait a moment to mimic real API latency
+                await asyncio.sleep(0.5)
+                result = {
+                    "campaign_id": str(uuid.uuid4()),
+                    "message": "SIMULATED: Campaign sent successfully via Demo Mode",
+                    "status": "success"
+                }
+                logger.info(f"DEMO_MODE: Simulated dispatch for variant {variant.get('label')}")
+            else:
+                result = await self.registry.execute(
+                    "send_campaign_api_v1_send_campaign_post",
+                    {
+                        "subject": subject,
+                        "body": body,
+                        "list_customer_ids": customer_ids,
+                        "send_time": send_time,
+                    },
+                )
 
             api_campaign_id = result.get("campaign_id")
             if api_campaign_id:
@@ -117,12 +129,20 @@ class ExecutionEngine(BaseEngine):
         tasks = []
         for seg_id, variants in execution_plan.items():
             seg_data = segments_map.get(seg_id, {})
-            customer_ids = seg_data.get("customers", [])
+            all_customer_ids = seg_data.get("customers", [])
             seg_name = seg_data.get("name", "unknown")
-            
-            if not customer_ids:
+
+            if not all_customer_ids:
                 logger.warning(f"No customer_ids for segment {seg_id}, skipping")
                 continue
+
+            # Sub-sample 70% of customers randomly so each loop has fresh data
+            # This prevents flat metrics from re-emailing the exact same people
+            sample_size = max(1, int(len(all_customer_ids) * 0.7))
+            customer_ids = random.sample(all_customer_ids, min(sample_size, len(all_customer_ids)))
+            logger.info(
+                f"Segment {seg_id}: sampling {len(customer_ids)}/{len(all_customer_ids)} customers"
+            )
 
             for variant in variants:
                 v_copy = variant.copy()
@@ -138,7 +158,7 @@ class ExecutionEngine(BaseEngine):
             "endpoint": "/api/v1/send_campaign"
         }}
 
-        return {"sent_campaigns": sent_campaigns}
+        return {"sent_campaigns": list(sent_campaigns)}
 
     @staticmethod
     def _default_send_time() -> str:

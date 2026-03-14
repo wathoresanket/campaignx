@@ -24,6 +24,7 @@ class EmailVariantResponse(EmailVariantBase, ORMBase):
 class SegmentBase(BaseModel):
     name: str
     customer_count: int
+    description: Optional[str] = None
 
 class SegmentResponse(SegmentBase, ORMBase):
     id: int
@@ -40,6 +41,8 @@ class CampaignBase(BaseModel):
     tone: Optional[str] = None
     optimization_goal: Optional[str] = None
     cta_url: Optional[str] = None
+    key_benefits: Optional[Any] = None
+    special_conditions: Optional[str] = None
     status: Optional[str] = "draft"
 
 class CampaignResponse(CampaignBase, ORMBase):
@@ -102,10 +105,14 @@ class BriefOutputSchema(BaseModel):
     tone: str
     optimization_goal: str
     cta_url: Optional[str] = None
+    key_benefits: List[str] = []
+    global_benefits: List[str] = []
+    conditional_benefits: List[str] = []
     special_conditions: Optional[str] = None
 
 class SegmentRuleSchema(BaseModel):
     name: str
+    description: str
     condition: str
     catch_all: bool
 
@@ -114,9 +121,13 @@ class SegmentationRulesSchema(BaseModel):
 
 class StrategyOutputSchema(BaseModel):
     segment_name: str
+    description: str
     send_time: str
     variants_count: int
     ab_testing_plan: str
+
+class StrategiesOutputSchema(BaseModel):
+    strategies: List[StrategyOutputSchema]
     
 class VariantContentSchema(BaseModel):
     label: str
@@ -150,3 +161,20 @@ class InsightItemSchema(BaseModel):
 
 class InsightsOutputSchema(BaseModel):
     insights: List[InsightItemSchema]
+
+
+# Modular Content Generation Schemas
+class SubjectLinesSchema(BaseModel):
+    subjects: List[str]
+
+
+class EmailBodiesSchema(BaseModel):
+    bodies: List[str]
+
+
+class VariantScoreSchema(BaseModel):
+    label: str
+    score: int
+
+class VariantScoresSchema(BaseModel):
+    scores: List[VariantScoreSchema]

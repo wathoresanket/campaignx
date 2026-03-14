@@ -23,6 +23,10 @@ class CampaignService:
             campaign.tone = parsed_data.get("tone")
             campaign.optimization_goal = parsed_data.get("optimization_goal")
             campaign.cta_url = parsed_data.get("cta_url")
+            campaign.key_benefits = json.dumps(parsed_data.get("key_benefits", []))
+            campaign.global_benefits = json.dumps(parsed_data.get("global_benefits", []))
+            campaign.conditional_benefits = json.dumps(parsed_data.get("conditional_benefits", []))
+            campaign.special_conditions = parsed_data.get("special_conditions")
             self.db.commit()
             
     def save_segments(self, campaign_id: int, segments_data: list):
@@ -30,6 +34,7 @@ class CampaignService:
             segment = Segment(
                 campaign_id=campaign_id,
                 name=seg.get("name"),
+                description=seg.get("description"), # Save personalization profile
                 customer_count=seg.get("customer_count"),
                 customer_ids=json.dumps(seg.get("customer_ids", []))
             )

@@ -1,7 +1,8 @@
 @import 'tailwindcss';
 
 :root {
-  --primary-color: #3b82f6; /* Blue 500 */
+  --primary-color: #3b82f6;
+  /* Blue 500 */
 }
 
 body {
@@ -11,7 +12,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f3f4f6; /* Gray 100 */
+  background-color: #f3f4f6;
+  /* Gray 100 */
 }
 
 code {

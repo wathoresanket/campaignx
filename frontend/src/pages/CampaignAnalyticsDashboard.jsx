@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { backendClient } from '../api/backendClient';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Activity, Trophy, Clock, Target, ArrowUpRight, ArrowDownRight } from 'lucide-react';
-
+import { Activity, Trophy, Clock, Target, ArrowUpRight, ArrowDownRight, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 export default function CampaignAnalyticsDashboard() {
     const { id } = useParams();
+    const [campaign, setCampaign] = useState(null);
     const [runs, setRuns] = useState([]);
     const [insights, setInsights] = useState([]);
     const [timeline, setTimeline] = useState([]);
@@ -14,11 +15,13 @@ export default function CampaignAnalyticsDashboard() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [runsResp, insightsResp, timelineResp] = await Promise.all([
+                const [campaignResp, runsResp, insightsResp, timelineResp] = await Promise.all([
+                    backendClient.get(`/campaigns/${id}`),
                     backendClient.get(`/campaigns/${id}/metrics`),
                     backendClient.get(`/campaigns/${id}/insights`),
                     backendClient.get(`/campaigns/${id}/optimization-timeline`),
                 ]);
+                setCampaign(campaignResp.data);
                 setRuns(runsResp.data || []);
                 setInsights(insightsResp.data || []);
                 setTimeline(timelineResp.data?.timeline || []);
@@ -37,11 +40,26 @@ export default function CampaignAnalyticsDashboard() {
 
     // Aggregate latest loop metrics for the BarChart
     const latestRun = runs.length > 0 ? runs[runs.length - 1] : null;
-    const barChartData = latestRun?.metrics?.map(m => ({
-        name: `Seg ${m.segment_id} (Var ${m.variant_id})`,
-        openRate: m.open_rate * 100, // Convert to percentage
-        clickRate: m.click_rate * 100, // Convert to percentage
-    })) || [];
+    const barChartData = latestRun?.metrics?.map(m => {
+        // Try to find the matching segment and variant names from the campaign object
+        let segName = `Seg ${m.segment_id}`;
+        let varLabel = `Var ${m.variant_id}`;
+
+        if (campaign && campaign.segments) {
+            const seg = campaign.segments.find(s => s.id === m.segment_id);
+            if (seg) {
+                segName = seg.name;
+                const v = seg.variants?.find(v => v.id === m.variant_id);
+                if (v) varLabel = v.variant_label;
+            }
+        }
+
+        return {
+            name: `${segName} (${varLabel})`,
+            openRate: m.open_rate * 100, // Convert to percentage
+            clickRate: m.click_rate * 100, // Convert to percentage
+        };
+    }) || [];
 
     return (
         <div className="space-y-6">
@@ -54,6 +72,51 @@ export default function CampaignAnalyticsDashboard() {
                     <p className="mt-1 text-sm text-gray-500">Real-time performance metrics and AI insights across segments.</p>
                 </div>
             </div>
+
+            {/* Pending Approval Banner */}
+            {campaign?.status === 'pending_approval' && (
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 shadow-sm rounded-r-lg">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                            <div className="flex-shrink-0">
+                                <AlertCircle className="h-5 w-5 text-yellow-400" />
+                            </div>
+                            <div className="ml-3">
+                                <p className="text-sm text-yellow-700 font-medium">
+                                    Action Required: This campaign is waiting for your approval before execution can begin.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="ml-4 flex-shrink-0">
+                            <Link
+                                to={`/campaign/${id}/approval`}
+                                className="bg-yellow-100 px-3 py-1.5 rounded-md text-sm font-medium text-yellow-800 hover:bg-yellow-200 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                            >
+                                Review & Approve
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Campaign Brief Summary */}
+            {campaign && (
+                <div className="bg-white p-6 rounded-lg shadow border border-gray-100 mb-6">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">Campaign Strategy Brief</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                        <div>
+                            <p className="font-semibold text-gray-900">Original Prompt:</p>
+                            <p className="italic bg-gray-50 p-3 rounded mt-1 border border-gray-100">{campaign.brief || 'No brief provided'}</p>
+                        </div>
+                        <div className="space-y-2">
+                            <p><span className="font-semibold text-gray-900">Product:</span> {campaign.product || 'N/A'}</p>
+                            <p><span className="font-semibold text-gray-900">Tone:</span> {campaign.tone || 'N/A'}</p>
+                            <p><span className="font-semibold text-gray-900">Goal:</span> <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">{campaign.optimization_goal || 'N/A'}</span></p>
+                            <p><span className="font-semibold text-gray-900">CTA:</span> <a href={campaign.cta_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{campaign.cta_url || 'N/A'}</a></p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Top Level Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -157,6 +220,73 @@ export default function CampaignAnalyticsDashboard() {
                     )}
                 </div>
             </div>
+
+            {/* In-depth Variant Results Section */}
+            {campaign && campaign.segments && campaign.segments.length > 0 && (
+                <div className="mt-8">
+                    <h4 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                        <ArrowDownRight className="mr-2 h-6 w-6 text-indigo-600" />
+                        Variant Performance Breakdown
+                    </h4>
+                    <div className="space-y-6">
+                        {campaign.segments.map(seg => (
+                            <div key={seg.id} className="bg-white p-6 rounded-lg shadow border border-gray-100">
+                                <h5 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 tracking-wide uppercase">{seg.name}</h5>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {seg.variants && seg.variants.map(variant => {
+                                        // Collect metrics for this specific variant across all runs
+                                        const variantMetrics = runs.map(run => {
+                                            const m = run.metrics.find(metric => metric.segment_id === seg.id && metric.variant_id === variant.id);
+                                            return {
+                                                loop: run.loop_index,
+                                                openRate: m ? (m.open_rate * 100).toFixed(1) + '%' : 'N/A',
+                                                clickRate: m ? (m.click_rate * 100).toFixed(1) + '%' : 'N/A'
+                                            };
+                                        }).filter(m => m.openRate !== 'N/A');
+
+                                        return (
+                                            <div key={variant.id} className="bg-gray-50 border border-gray-200 rounded p-4 flex flex-col">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-800">
+                                                        {variant.variant_label}
+                                                    </span>
+                                                </div>
+                                                <h6 className="font-semibold text-gray-900 mb-1 line-clamp-2" title={variant.subject}>{variant.subject}</h6>
+                                                <p className="text-sm text-gray-600 mb-4 flex-grow line-clamp-3" title={variant.body}>{variant.body}</p>
+
+                                                {/* Metrics Table */}
+                                                <div className="mt-auto bg-white rounded border border-gray-100 overflow-hidden">
+                                                    <table className="min-w-full divide-y divide-gray-200">
+                                                        <thead className="bg-gray-100">
+                                                            <tr>
+                                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loop</th>
+                                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Open Rate</th>
+                                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Click Rate</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="bg-white divide-y divide-gray-100 text-sm">
+                                                            {variantMetrics.length > 0 ? variantMetrics.map(vm => (
+                                                                <tr key={vm.loop}>
+                                                                    <td className="px-3 py-2 text-gray-900 font-medium">{vm.loop}</td>
+                                                                    <td className="px-3 py-2 text-emerald-600 font-medium">{vm.openRate}</td>
+                                                                    <td className="px-3 py-2 text-blue-600 font-medium">{vm.clickRate}</td>
+                                                                </tr>
+                                                            )) : (
+                                                                <tr><td colSpan="3" className="px-3 py-2 text-center text-gray-400 text-xs">Awaiting data</td></tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

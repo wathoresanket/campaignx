@@ -12,7 +12,7 @@ import MetricsChart from '../components/MetricsChart';
 import SystemLogsPanel from '../components/SystemLogsPanel';
 import OptimizationTimelineChart from '../components/OptimizationTimelineChart';
 import CampaignTimeline from '../components/CampaignTimeline';
-import { Activity, IterationCcw, Download, Lightbulb, PieChart } from 'lucide-react';
+import { Activity, IterationCcw, Download, Lightbulb, PieChart, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function DashboardPage() {
@@ -70,6 +70,32 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-6">
+            {/* Pending Approval Banner */}
+            {campaign?.status === 'pending_approval' && (
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 shadow-sm rounded-r-lg">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                            <div className="flex-shrink-0">
+                                <AlertCircle className="h-5 w-5 text-yellow-400" />
+                            </div>
+                            <div className="ml-3">
+                                <p className="text-sm text-yellow-700 font-medium">
+                                    Action Required: This campaign is waiting for your approval before execution can begin.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="ml-4 flex-shrink-0">
+                            <Link
+                                to={`/campaign/${id}/approval`}
+                                className="bg-yellow-100 px-3 py-1.5 rounded-md text-sm font-medium text-yellow-800 hover:bg-yellow-200 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                            >
+                                Review & Approve
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Final Round Competition Banner */}
             <div className="bg-indigo-600 px-4 py-3 rounded-lg shadow-lg mb-6 flex items-center justify-between text-white">
                 <div className="flex items-center">
@@ -160,7 +186,7 @@ export default function DashboardPage() {
 
             {runs.map((run) => {
                 const chartData = run.metrics?.map(m => ({
-                    name: `Variant ${m.variant_id} (Seg ${m.segment_id})`,
+                    name: `${m.segment?.name || `Seg ${m.segment_id}`} (${m.variant?.variant_label || `Var ${m.variant_id}`})`,
                     openRate: m.open_rate,
                     clickRate: m.click_rate
                 })) || [];

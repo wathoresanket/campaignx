@@ -31,7 +31,7 @@ class BaseEngine:
     Subclasses inherit the client and call `_complete_json()`.
     """
 
-    def __init__(self, model: str = "llama-3.3-70b-versatile"):
+    def __init__(self, model: str = "llama-3.1-8b-instant"):
         self.model = model
 
     async def _complete_json(self, prompt: str, temperature: float = 0.3) -> Dict[str, Any]:
@@ -42,29 +42,51 @@ class BaseEngine:
         if not groq_client:
             raise ValueError("GROQ_API_KEY is not configured in .env")
             
-        try:
-            # Groq's JSON mode requires the prompt to include "json"
-            if "json" not in prompt.lower():
-                prompt += "\n\nImportant: You must reply in valid JSON format."
+        max_retries = 3
+        base_delay = 5  # Start with 5s delay for 429s
+        
+        for attempt in range(max_retries + 1):
+            try:
+                # Groq's JSON mode requires the prompt to include "json"
+                if "json" not in prompt.lower():
+                    prompt += "\n\nImportant: You must reply in valid JSON format."
+                    
+                response = await asyncio.wait_for(
+                    groq_client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=temperature,
+                        response_format={"type": "json_object"}
+                    ),
+                    timeout=60.0
+                )
+
+                # Small throttle to stay within Groq free-tier rate limits
+                await asyncio.sleep(2)
+
+                return json.loads(response.choices[0].message.content)
+            
+            except asyncio.TimeoutError:
+                logger.error(f"Groq API call timed out (Attempt {attempt+1}/{max_retries+1})")
+                if attempt == max_retries:
+                    raise Exception("Groq API call timed out after multiple retries.")
+                await asyncio.sleep(base_delay * (2 ** attempt))
                 
-            response = await asyncio.wait_for(
-                groq_client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=temperature,
-                    response_format={"type": "json_object"}
-                ),
-                timeout=30.0
-            )
-            return json.loads(response.choices[0].message.content)
-        except asyncio.TimeoutError:
-            logger.error("Groq API call timed out after 30 seconds.")
-            raise Exception("Groq API call timed out.")
-        except Exception as e:
-            logger.error(f"Groq API generation failed: {e}")
-            raise
+            except Exception as e:
+                # Check for rate limit error (429)
+                error_msg = str(e).lower()
+                if "rate limit" in error_msg or "429" in error_msg:
+                    logger.warning(f"Groq Rate Limit hit (Attempt {attempt+1}/{max_retries+1}). Retrying in {base_delay * (2 ** attempt)}s...")
+                    if attempt == max_retries:
+                        raise e
+                    await asyncio.sleep(base_delay * (2 ** attempt))
+                else:
+                    logger.error(f"Groq API generation failed: {e}")
+                    raise
+        
+        raise Exception("Failed to generate response after multiple retries.")
 
     async def _complete_pydantic(self, prompt: str, schema: Type[ModelType], temperature: float = 0.3) -> ModelType:
         """

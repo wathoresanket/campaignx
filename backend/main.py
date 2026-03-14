@@ -12,7 +12,10 @@ from api.campaign_api import router as campaign_router
 logging.basicConfig(level=logging.INFO)
 
 # Create all database tables on startup
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    logging.warning(f"Database initialization warning (likely tables exist): {e}")
 
 app = FastAPI(title="CampaignX API", version="1.0.0")
 
