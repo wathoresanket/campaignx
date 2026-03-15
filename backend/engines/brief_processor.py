@@ -35,10 +35,15 @@ class BriefProcessor(BaseEngine):
         - "conditional_benefits": list of strings, Demographic-specific bonuses (e.g. "+0.25% for seniors"). IMPORTANT: Clearly separate targeted rewards from general ones. Do NOT overlap with global_benefits.
         - "special_conditions": string, other campaign rules.
 
-        PEDANTIC PARSING RULE: 
-        If a benefit is linked to a demographic (e.g. "seniors", "students", "female", "under 25"), it MUST go into `conditional_benefits`. 
-        If it's available to anyone opening the account, it MUST go into `global_benefits`.
-        Accuracy is critical to prevent false claims for ineligible segments.
+        PEDANTIC PARSING RULES:
+        1. If a benefit is linked to a demographic (e.g. "seniors", "students", "female", "under 25"), it MUST go into `conditional_benefits`.
+        2. If it's available to anyone opening the account, it MUST go into `global_benefits`.
+        3. EXTRACT TARGET SEGMENTS: You MUST scan the brief for ANY mention of specific audiences.
+            - Any group mentioned in `conditional_benefits` (e.g., "female senior citizens") MUST be added to `target_segments`.
+            - Any group mentioned in `constraints` (e.g., "don't skip inactive" -> "inactive customers") MUST be added to `target_segments`.
+            - Do NOT just put "all customers" if specific groups are mentioned. You can include "all customers" as the broad audience, but specific groups MUST be listed separately.
+        
+        Accuracy is critical to prevent false claims for ineligible segments and to ensure the Segmentation Engine creates the right rules.
 
         Brief to parse:
         "{brief_text}"

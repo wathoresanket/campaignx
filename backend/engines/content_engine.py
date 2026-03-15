@@ -53,21 +53,40 @@ class ContentEngine(BaseEngine):
             "female": ["female", "woman", "women", "lady", "ladies"],
             "male": ["male", "man", "men", "gentleman", "gentlemen"],
             "youth": ["youth", "student", "young", "college", "under-25", "teen"],
-            "professional": ["professional", "salaried", "corporate", "working"]
+            "professional": ["professional", "salaried", "corporate", "working"],
+            "inactive": ["inactive", "dormant", "re-activate"]
         }
 
         eligible = []
         ineligible = []
         for benefit in conditional_benefits:
             benefit_lower = benefit.lower()
-            required_keywords = []
+            
+            # Find which demographic GROUPS are REQUIRED by this benefit
+            required_groups = []
             for group, keywords in demographic_map.items():
                 if any(kw in benefit_lower for kw in keywords):
-                    required_keywords.extend(keywords)
-            if not required_keywords or any(kw in name_lower for kw in required_keywords):
+                    required_groups.append(group)
+            
+            if not required_groups:
+                # If no specific demographic mentioned, it shouldn't really be a conditional benefit, 
+                # but we'll treat it as eligible to be safe.
+                eligible.append(benefit)
+                continue
+
+            # Segment MUST satisfy ALL mentioned groups in the benefit
+            is_match = True
+            for group in required_groups:
+                keywords = demographic_map[group]
+                if not any(kw in name_lower for kw in keywords):
+                    is_match = False
+                    break
+            
+            if is_match:
                 eligible.append(benefit)
             else:
                 ineligible.append(benefit)
+                
         return eligible, ineligible
 
 
@@ -92,8 +111,9 @@ class ContentEngine(BaseEngine):
             variants = self._combine_variants(subjects, bodies)
 
             # Post-validation: strip any conditional benefits the LLM may have still included for ineligible segments
+            global_benefits = parsed_brief.get("global_benefits", parsed_brief.get("key_benefits", []))
             for v in variants:
-                v["body"] = self._validate_segment_benefits(segment_name, v["body"], conditional_benefits)
+                v["body"] = self._validate_segment_benefits(segment_name, v["body"], conditional_benefits, global_benefits)
 
             scored_variants = await self._score_variants(segment_name, variants)
 
@@ -213,10 +233,7 @@ Global Benefits (apply to ALL segments — ALWAYS include these):
 {parsed_brief.get("global_benefits", parsed_brief.get("key_benefits", []))}
 
 ELIGIBLE Conditional Benefits for "{segment_name}" (MUST include these in the email body):
-{eligible_benefits if eligible_benefits else 'None — this segment has no conditional bonuses. Do NOT mention any conditional benefits.'}
-
-INELIGIBLE Benefits (ABSOLUTELY DO NOT mention these):
-{ineligible_benefits if ineligible_benefits else 'None'}
+{eligible_benefits if eligible_benefits else 'None — this segment has no conditional bonuses.'}
 
 {history}
 
@@ -317,70 +334,73 @@ score
             return variants
 
 
-    def _validate_segment_benefits(self, segment_name: str, body: str, conditional_benefits: list):
+    def _validate_segment_benefits(self, segment_name: str, body: str, conditional_benefits: List[str], global_benefits: List[str]) -> str:
         """
-        Strips conditional benefits from the email body if the segment
-        doesn't appear eligible. Performs aggressive keyword and demographic checking.
+        Strips conditional benefits and unauthorized numbers from the email body.
         """
-        if not conditional_benefits:
-            return body
-
         name_lower = segment_name.lower()
+        
+        # 1. Identify all ALLOWED numbers/percentages for THIS segment
+        eligible_benefits, _ = self._get_eligible_benefits(segment_name, conditional_benefits)
+        allowed_text = " ".join(global_benefits + eligible_benefits)
+        
+        # Extract raw numbers (e.g. 0.85, 9, 1) to be flexible with % vs "percentage point"
+        allowed_numbers = set(re.findall(r'(\d+\.?\d*)', allowed_text))
+        
+        # 2. Identify all POTENTIALLY FORBIDDEN numbers/percentages in the email body
+        # We look for numbers followed by % or "percentage" to be specific to financial claims
+        body_claims = re.findall(r'(\d+\.?\d*)\s*(?:%|percentage)', body)
+        for val in body_claims:
+            if val not in allowed_numbers:
+                # This number was hallucinated or leaked from another segment
+                logger.warning(f"Validator: Stripping unauthorized claim '{val}' from segment '{segment_name}'")
+                # Strip the number and any following % or percentage point text
+                body = re.sub(rf'{re.escape(val)}\s*(?:%|percentage\s+point[s]?)', "[STRIPPED]", body)
 
-        # Demographic keyword map for stricter filtering
+        # 3. Strip the specific benefit phrases for ineligible segments (if LLM included them)
         demographic_map = {
             "senior": ["senior", "citizen", "elderly", "retired", "60+"],
             "female": ["female", "woman", "women", "lady", "ladies"],
             "male": ["male", "man", "men", "gentleman", "gentlemen"],
             "youth": ["youth", "student", "young", "college", "under-25", "teen"],
-            "professional": ["professional", "salaried", "corporate", "working"]
+            "professional": ["professional", "salaried", "corporate", "working"],
+            "inactive": ["inactive", "dormant", "re-activate"]
         }
 
         for benefit in conditional_benefits:
+            if benefit in eligible_benefits:
+                continue
+                
             benefit_lower = benefit.lower()
-
-            # Find which demographic GROUPS are mentioned in this benefit
             required_groups = []
             for group, keywords in demographic_map.items():
                 if any(kw in benefit_lower for kw in keywords):
                     required_groups.append(group)
 
-            # If the benefit has demographic triggers, segment MUST satisfy ALL mentioned groups
-            eligible = True
+            is_match = True
             for group in required_groups:
                 keywords = demographic_map[group]
                 if not any(kw in name_lower for kw in keywords):
-                    eligible = False
+                    is_match = False
                     break
-
-            if not eligible:
-                # Segment does NOT match the required demographics. Aggressively strip the benefit.
-
-                # 1. Strip the specific benefit phrase
+            
+            if not is_match:
+                # Segment doesn't match the required demographics for this benefit.
+                # If the benefit (or a close match) is present, strip it.
                 body = body.replace(benefit, "[STRIPPED]")
-
-                # 2. Strip any percentages mentioned in that benefit from the body
-                percentages = re.findall(r'\d+\.?\d*%', benefit)
-                for pct in percentages:
-                    body = body.replace(pct, "[STRIPPED]")
-
-                # 3. Strip the audience description if "for ..." exists
-                if "for " in benefit_lower:
-                    try:
-                        audience_text = benefit.split("for ", 1)[1]
-                        body = body.replace(audience_text, "[STRIPPED]")
-                    except Exception:
-                        pass
-
-                logger.info(f"Validator: Stripped '{benefit}' from ineligible segment '{segment_name}'")
+                
+                # Also strip demographic keywords that shouldn't be here
+                for group in required_groups:
+                    # Don't strip "male" if the segment is "male young citizens"
+                    if group not in name_lower:
+                        for kw in demographic_map[group]:
+                             body = body.replace(kw, "[STRIPPED]")
 
         # Cleanup: Replace [STRIPPED] and fix punctuation/spacing
         body = body.replace("[STRIPPED]", "")
         body = " ".join(body.split())
-
-        # Final cleanup for hanging punctuation (e.g. "Enjoy returns of .")
         body = re.sub(r'\s+([.,!?])', r'\1', body)
-        body = re.sub(r'([.,!?])\s*\1+', r'\1', body)  # Remove double punctuation
+        body = re.sub(r'([.,!?])\s*\1+', r'\1', body)
 
         return body
 

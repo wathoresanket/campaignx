@@ -429,7 +429,7 @@ class CampaignCoordinator:
             segments = await self._execute_task(
                 campaign_id, "SegmentEngine",
                 self.segment_engine.run, [parsed_brief],
-                kwargs={"cohort_data": cohort_data},
+                kwargs={"cohort_data": cohort_data, "feedback": feedback},
                 input_data={"parsed_brief": parsed_brief, "cohort_size": len(cohort_data)},
                 action_running="Re-applying micro-segmentation with feedback",
                 action_done="Re-created segments incorporating feedback",

@@ -96,22 +96,7 @@ export default function DashboardPage() {
                 </div>
             )}
 
-            {/* Final Round Competition Banner */}
-            <div className="bg-indigo-600 px-4 py-3 rounded-lg shadow-lg mb-6 flex items-center justify-between text-white">
-                <div className="flex items-center">
-                    <div className="p-2 bg-indigo-500 rounded-lg mr-3">
-                        <Activity className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <p className="font-bold text-lg">Final On-Campus Round Active</p>
-                        <p className="text-indigo-100 text-sm">Targeting 1,000 customers. Scoring focus: Maximizing EC & EO counts.</p>
-                    </div>
-                </div>
-                <div className="text-right hidden md:block">
-                    <p className="text-xs uppercase tracking-wider text-indigo-200 font-semibold">Competition Window</p>
-                    <p className="font-mono font-medium">10 Mar - 14 Mar 2026</p>
-                </div>
-            </div>
+
 
             <div className="bg-white px-4 py-5 border-b border-gray-200 sm:px-6 shadow rounded-lg mb-6 flex justify-between items-center">
                 <div>

@@ -8,7 +8,7 @@ No hardcoded demographic logic.
 
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from engines.base_engine import BaseEngine
 
@@ -21,6 +21,7 @@ class SegmentEngine(BaseEngine):
         self,
         parsed_brief: Dict[str, Any],
         cohort_data: List[Dict[str, Any]] = None,
+        feedback: Optional[str] = None
     ) -> List[Dict[str, Any]]:
 
         customers = cohort_data or []
@@ -64,13 +65,14 @@ Campaign Brief:
 Customer Cohort Summary:
 {cohort_summary}
 
+{f"REJECTION FEEDBACK TO ADDRESS:\n{feedback}" if feedback else ""}
+
 Return segments as a JSON object with a single key `segments` containing the array of rule objects.
 """
 
         from schemas import SegmentationRulesSchema
 
         result = await self._complete_pydantic(prompt, SegmentationRulesSchema)
-
         segment_rules = [rule.model_dump() for rule in result.segments]
 
         logger.info(f"Defined {len(segment_rules)} segmentation rules")
@@ -78,68 +80,73 @@ Return segments as a JSON object with a single key `segments` containing the arr
         segments = self._apply_rules(segment_rules, customers)
 
         logger.info(
-            f"Created {len(segments)} segments from {len(customers)} customers"
+            f"Created {len(segments)} segments from {len(customers)} customers (including empty ones for visibility)"
         )
 
         return segments
 
 
     def _apply_rules(self, rules, customers):
-
         assigned = set()
         segments = []
-        catch_all = None
+        catch_all_rule = None
+        
+        # Broad keywords that imply a catch-all/general audience
+        BROAD_KEYWORDS = {"all customers", "general audience", "everyone", "all"}
 
+        # 1. Separately identify catch_all to ensure it runs last
+        # Also treat rules with broad names as catch-alls to prevent specific segment starvation
+        priority_rules = []
         for rule in rules:
+            name_lower = rule.get("name", "").lower()
+            if rule.get("catch_all") or name_lower in BROAD_KEYWORDS:
+                # If we encounter multiple catch-all-like rules, keep the one actually marked catch_all
+                if not catch_all_rule or rule.get("catch_all"):
+                    catch_all_rule = rule
+            else:
+                priority_rules.append(rule)
 
-            if rule.get("catch_all"):
-                catch_all = rule
-                continue
-
-            condition = rule.get("condition","True")
-            name = rule.get("name","Segment")
-
+        # 2. Process priority rules first
+        for rule in priority_rules:
+            condition = rule.get("condition", "True")
+            name = rule.get("name", "Segment")
             matches = []
 
             for c in customers:
-
                 cid = c.get("customer_id")
-
                 if cid in assigned:
                     continue
 
                 try:
-
                     if eval(condition, {"__builtins__": {}}, {"c": c}):
-
                         matches.append(cid)
                         assigned.add(cid)
-
                 except Exception as eval_err:
                     logger.warning(f"Failed to evaluate condition '{condition}' for cid={cid}: {eval_err}")
                     continue
 
-            if matches:
+            # Always append the segment, even if matches is empty, for visibility
+            segments.append({
+                "name": name,
+                "customer_count": len(matches),
+                "customer_ids": matches
+            })
 
-                segments.append({
-                    "name": name,
-                    "customer_count": len(matches),
-                    "customer_ids": matches
-                })
-
+        # 3. Process catch_all or remaining customers
         remaining = [
             c["customer_id"]
             for c in customers
             if c["customer_id"] not in assigned
         ]
 
-        if remaining:
-
-            segments.append({
-                "name": catch_all.get("name","General Audience") if catch_all else "General Audience",
-                "customer_count": len(remaining),
-                "customer_ids": remaining
-            })
+        # Use LLM-provided name for catch-all if available, else default
+        catch_all_name = catch_all_rule.get("name", "General Audience") if catch_all_rule else "General Audience"
+        
+        segments.append({
+            "name": catch_all_name,
+            "customer_count": len(remaining),
+            "customer_ids": remaining
+        })
 
         return segments
 
